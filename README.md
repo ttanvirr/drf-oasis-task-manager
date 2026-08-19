@@ -2,7 +2,7 @@
 
 - [1. Oasis task manager](#1-oasis-task-manager)
 - [2. Step by step guide from scratch](#2-step-by-step-guide-from-scratch)
-  - [2.1. Initialze project](#21-initialze-project)
+  - [2.1. Initialze a DRF project with database setup](#21-initialze-a-drf-project-with-database-setup)
   - [2.2. Creating `tasks` app](#22-creating-tasks-app)
   - [2.3. Creating `Task` model](#23-creating-task-model)
 
@@ -14,32 +14,11 @@ The application is built with Django REST Framework (DRF) and React, with Postgr
 
 # 2. Step by step guide from scratch
 
-## 2.1. Initialze project
+## 2.1. Initialze a DRF project with database setup
 
-1. Create a project directory (whatever name). Then navigate to the directory.
-2. create a new virtual environment called `.venv`, using `venv`. Then Activate the venv.
+1. [Follow this guide](https://tinyurl.com/2hwk68af) to create a django project with `PostgreSQL` database setup.
 
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. Put `.venv/` in the `.gitignore` file.
-4. Now that we're inside a virtual environment, we can install our package requirements:
-
-   ```bash
-   pip install django
-   pip install djangorestframework
-   pip freeze > requirements.txt
-   ```
-
-5. Let's create the project core inside our root directory `.`. We'll name the core directory as `config`:
-
-   ```bash
-   django-admin startproject config .
-   ```
-
-6. We'll need to add the `rest_framework` app to `INSTALLED_APPS`. Let's edit the `config/settings.py` file:
+2. We'll need to add the `rest_framework` app to `INSTALLED_APPS`. Let's edit the `config/settings.py` file:
 
    ```py
    INSTALLED_APPS = [
@@ -87,11 +66,11 @@ class Task(models.Model):
         ordering = ["-created_at"]
 ```
 
-We'll also need to create an initial migration sync the database for the first time.
+We'll also need to create an migration for Task model and sync the database.
 
 ```bash
 python manage.py makemigrations tasks
-python manage.py migrate tasks
+python manage.py migrate
 ```
 
 Commit changes to Git.
