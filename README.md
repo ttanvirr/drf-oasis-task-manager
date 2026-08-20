@@ -5,6 +5,7 @@
   - [2.1. Initialze a DRF project with database setup](#21-initialze-a-drf-project-with-database-setup)
   - [2.2. Creating `tasks` app](#22-creating-tasks-app)
   - [2.3. Creating `Task` model](#23-creating-task-model)
+  - [2.4. Creating a Serializer class for Task](#24-creating-a-serializer-class-for-task)
 
 # 1. Oasis task manager
 
@@ -74,3 +75,42 @@ python manage.py migrate
 ```
 
 Commit changes to Git.
+
+## 2.4. Creating a Serializer class for Task
+
+To get started on our Web API, we need provide a way of serializing and deserializing the `task` instances into representations such as `json`. We can do this by declaring serializers. Create a file in the `tasks` directory named `serializers.py` and add the following:
+
+`tasks/serializers.py`
+
+```py
+from rest_framework import serializers
+
+from .models import Task
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = ["id", "title", "completed", "important", "created_at", "updated_at"]
+```
+
+REST framework includes both `Serializer` classes, and `ModelSerializer` classes. We used the latter to make our code concise.
+
+You can inspect all the fields in a serializer instance, by printing its representation. Start the Django shell, then try the following:
+
+```bash
+$ python manage.py shell
+```
+
+```py
+>>> from tasks.serializers import TaskSerializer
+>>> serializer = TaskSerializer()
+
+>>> print(repr(serializer))
+TaskSerializer():
+    id = BigIntegerField(label='ID', read_only=True)
+    title = CharField(max_length=255)
+    completed = BooleanField(required=False)
+    important = BooleanField(required=False)
+    created_at = DateTimeField(read_only=True)
+    updated_at = DateTimeField(read_only=True)
+```
