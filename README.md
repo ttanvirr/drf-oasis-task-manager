@@ -19,6 +19,7 @@
     - [2.6.5. How's it looking?](#265-hows-it-looking)
     - [2.6.6. Browsability](#266-browsability)
     - [2.6.7. Class-based Views](#267-class-based-views)
+      - [2.6.7.1. Rewriting our API using class-based views](#2671-rewriting-our-api-using-class-based-views)
 
 # 1. Oasis task manager
 
@@ -488,3 +489,13 @@ See the [browsable api topic](https://tinyurl.com/mvbkcm88) for more information
 [⬆️ Return to Table of contents](#table-of-contents)
 
 ### 2.6.7. Class-based Views
+
+We can also write our API views using class-based views. As it allows us to reuse common functionality, and helps us keep our code `DRY`.
+
+#### 2.6.7.1. Rewriting our API using class-based views
+
+Let's refactor our `tasks/views.py`:
+
+```py
+
+```
