@@ -144,6 +144,8 @@ TaskSerializer():
 
 ### 2.4.1. Working with Serializers
 
+(Some of the follwoing sections will demonstrate the serialization and deserialization process. You can skip to the [Creating API views](#26-creating-api-views-using-our-serializer) section if you want.)
+
 Let's drop into the Django shell.
 
 ```bash
@@ -265,16 +267,14 @@ Okay, first, we'll work with function-based views to understand things more expl
 `tasks/views`
 
 ```py
-from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
 from rest_framework import status
-from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from tasks.models import Task
-from tasks.serializers import TaskSerializer
+from .models import Task
+from .serializers import TaskSerializer
 
 
 @api_view(["GET", "POST"])
@@ -299,7 +299,7 @@ def task_list(request):
         serializer = TaskSerializer(data=request.data)
 
         if serializer.is_valid():
-            # save the updated task instance
+            # save the new task instance
             serializer.save()
             # Return json response
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -335,8 +335,8 @@ def task_detail(request, pk):
     elif request.method == "DELETE":
         # Delete task instance
         task.delete()
+        # Return a simple http response
         return HttpResponse(status=status.HTTP_204_NO_CONTENT)
-
 ```
 
 [⬆️ Return to Table of contents](#table-of-contents)
@@ -349,11 +349,12 @@ Finally we need to wire these views up. Create the `tasks/urls.py` file:
 
 ```py
 from django.urls import path
-from snippets import views
+
+from tasks import views
 
 urlpatterns = [
-    path("snippets/", views.snippet_list),
-    path("snippets/<int:pk>/", views.snippet_detail),
+    path("tasks/", views.task_list),
+    path("tasks/<int:pk>/", views.task_detail),
 ]
 ```
 
