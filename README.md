@@ -18,7 +18,6 @@
     - [2.6.4. Adding optional format suffixes to our URLs](#264-adding-optional-format-suffixes-to-our-urls)
     - [2.6.5. How's it looking?](#265-hows-it-looking)
     - [2.6.6. Browsability](#266-browsability)
-    - [2.6.7. Class-based Views](#267-class-based-views)
 
 # 1. Oasis task manager
 
@@ -486,5 +485,3 @@ Having a web-browsable API also lowers the barrier for other developers wanting 
 See the [browsable api topic](https://tinyurl.com/mvbkcm88) for more information about the browsable API feature and how to customize it.
 
 [⬆️ Return to Table of contents](#table-of-contents)
-
-### 2.6.7. Class-based Views
