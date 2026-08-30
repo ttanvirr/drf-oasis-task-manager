@@ -381,15 +381,15 @@ Now we can start up a sample server that serves our `tasks`.
 Start up Django's development server.
 
 ```bash
-$ python manage.py runserver
+uv run manage.py runserver
 ```
 
 In another terminal window, we can test the server.
 
-We can test our API using `curl` or `HTTPie`. `HTTPie` is a user-friendly http client that's written in Python. Let's install that using pip:
+We can test our API using `curl` or `HTTPie`. `HTTPie` is a user-friendly http client that's written in Python. Let's install that globally using `uv` (don't add it as a project dependency):
 
 ```bash
-$ pip install httpie
+uv tool install httpie
 ```
 
 Finally, we can get a list of all of the tasks:
@@ -403,6 +403,9 @@ Or we can get a particular task by referencing its id:
 ```bash
 http GET http://127.0.0.1:8000/tasks/2/ --unsorted
 ```
+
+> [!NOTE]
+> Don't forget the trailing slash `/` at the end of the URL. Because these should match our defined urlpatterns.
 
 Similarly, you can have the same json displayed by visiting these URLs in a web browser.
 

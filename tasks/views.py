@@ -9,7 +9,7 @@ from .serializers import TaskSerializer
 
 
 @api_view(["GET", "POST"])
-def task_list(request):
+def task_list(request, format=None):
     """
     List all tasks (GET), or create a new task (POST).
     """
@@ -38,7 +38,7 @@ def task_list(request):
 
 
 @api_view(["GET", "PUT", "DELETE"])
-def task_detail(request, pk):
+def task_detail(request, pk, format=None):
     """
     Retrieve (GET), update (PUT), or delete (DELETE) a single task.
     """
