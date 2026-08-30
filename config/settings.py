@@ -11,8 +11,6 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import environ
-import os
-import dj_database_url
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -24,9 +22,8 @@ env = environ.Env(
     DEBUG=(bool, False)
 )
 
-# Read the .env file
-environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
-
+# Read .env file
+env.read_env(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
@@ -37,7 +34,7 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "172.23.76.222"]
+ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -49,8 +46,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "rest_framework",
-    "tasks",
 ]
 
 MIDDLEWARE = [
@@ -86,8 +81,15 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
 DATABASES = {
-    "default": env.db(),  # Parses DATABASE_URL using django-environ's built-in dj-database-url support.
+    "default": env.db(),  # django-environ reads DATABASE_URL and converts it into Django's DATABASES configuration.
 }
 DATABASES["default"]["CONN_MAX_AGE"] = 600
 
