@@ -90,11 +90,11 @@ class Task(models.Model):
         ordering = ["-created_at"]
 ```
 
-We'll also need to create an migration for Task model and sync the database.
+We'll also need to create an migration for `Task` model and sync the database.
 
 ```bash
-python manage.py makemigrations tasks
-python manage.py migrate
+uv run manage.py makemigrations tasks
+uv run manage.py migrate
 ```
 
 Commit changes to Git.
