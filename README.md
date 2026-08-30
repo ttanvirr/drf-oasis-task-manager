@@ -32,10 +32,10 @@ The application is built with Django REST Framework (DRF) and React, with Postgr
 
 1. [Follow this guide](https://tinyurl.com/2hwk68af) to create a django project with `PostgreSQL` database setup (use `uv` tool).
 
-2. Install django rest framework in venv:
+2. Install django rest framework:
 
    ```bash
-   pip install djangorestframework
+   uv add djangorestframework
    ```
 
 3. We'll need to add the `rest_framework` app to `INSTALLED_APPS`. Let's edit the `config/settings.py` file:
@@ -54,7 +54,7 @@ The application is built with Django REST Framework (DRF) and React, with Postgr
 1. Now, we can create an app that we'll use to create a Web API.
 
    ```bash
-   python manage.py startapp tasks
+   uv run manage.py startapp tasks
    ```
 
 2. We'll need to add our new `tasks` app to `INSTALLED_APPS`. Let's edit the `config/settings.py` file:
