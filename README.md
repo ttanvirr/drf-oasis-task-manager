@@ -103,7 +103,7 @@ Commit changes to Git.
 
 ## 2.4. Creating a Serializer class for Task
 
-To get started on our Web API, we need provide a way of serializing and deserializing the `task` instances into representations such as `json`. We can do this by declaring serializers. Create a file in the `tasks` directory named `serializers.py` and add the following:
+To get started on our Web API, we need to provide a way of serializing and deserializing the `Task` instances into representations such as `json`. We can do this by declaring serializers. Create a file in the `tasks` directory named `serializers.py` and add the following model serializer class:
 
 `tasks/serializers.py`
 
@@ -123,7 +123,7 @@ REST framework includes both `Serializer` and `ModelSerializer` classes. We used
 You can inspect all the fields in a serializer instance, by printing its representation. Start the Django shell, then try the following:
 
 ```bash
-$ python manage.py shell
+uv run manage.py shell
 ```
 
 ```py
@@ -147,7 +147,7 @@ TaskSerializer():
 Let's drop into the Django shell.
 
 ```bash
-python manage.py shell
+uv run manage.py shell
 ```
 
 #### 2.4.1.1. Create some tasks
@@ -160,7 +160,7 @@ Now, let's create a couple of tasks to work with.
 >>> from rest_framework.renderers import JSONRenderer
 >>> from rest_framework.parsers import JSONParser
 >>>
->>> task = Task(title="Fist task")
+>>> task = Task(title="First task")
 >>> task.save()
 >>>
 >>> task = Task(title="Second task", important=True)
@@ -217,9 +217,9 @@ True
 We can also serialize querysets (all instances) instead of a single model instances. To do so we simply add a `many=True` flag to the serializer arguments.
 
 ```py
->>> serializer = SnippetSerializer(Snippet.objects.all(), many=True)
+>>> serializer = TaskSerializer(Task.objects.all(), many=True)
 >>> serializer.data
-[{'id': 1, 'title': '', 'code': 'foo = "bar"\n', 'linenos': False, 'language': 'python', 'style': 'friendly'}, {'id': 2, 'title': '', 'code': 'print("hello, world")\n', 'linenos': False, 'language': 'python', 'style': 'friendly'}, {'id': 3, 'title': '', 'code': 'print("hello, world")', 'linenos': False, 'language': 'python', 'style': 'friendly'}]
+[{'id': 2, 'title': 'Second task', 'completed': False, 'important': True, 'created_at': '2026-08-30T21:42:49.403893Z', 'updated_at': '2026-08-30T21:42:49.403937Z'}, {'id': 1, 'title': 'First task', 'completed': False, 'important': True, 'created_at': '2026-08-30T21:24:30.044611Z', 'updated_at': '2026-08-30T21:24:30.044647Z'}]
 ```
 
 Here, we got a list of python dictioneries.
