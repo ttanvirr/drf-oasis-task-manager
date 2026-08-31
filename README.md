@@ -21,6 +21,7 @@
     - [2.6.7. Class-based Views](#267-class-based-views)
       - [2.6.7.1. Rewriting our API using class-based views](#2671-rewriting-our-api-using-class-based-views)
       - [2.6.7.2. Using mixins](#2672-using-mixins)
+      - [2.6.7.3. Using generic class-based views](#2673-using-generic-class-based-views)
 
 # 1. Oasis task manager
 
@@ -662,3 +663,39 @@ Again we're using the `GenericAPIView` class to provide the core functionality, 
 Run the development server and make sure everything is working as expected.
 
 [⬆️ Return to Table of contents](#table-of-contents)
+
+#### 2.6.7.3. Using generic class-based views
+
+REST framework provides a set of already mixed-in generic views that we can use to trim down our `views.py` module even more.
+
+`tasks/views.py`
+
+```py
+from rest_framework import generics
+
+from .models import Task
+from .serializers import TaskSerializer
+
+
+class TaskList(generics.ListCreateAPIView):
+    """
+    List all tasks (GET), or create a new task (POST).
+    """
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+
+class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve (GET), update (PUT), or delete (DELETE) a single task.
+    """
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+```
+
+We've gotten a huge amount for free, and our code looks like good, clean, idiomatic Django.
+
+Again, run the development server and make sure everything is working as expected.
