@@ -7,6 +7,9 @@ class Task(models.Model):
     important = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        "auth.User", related_name="tasks", on_delete=models.CASCADE
+    )
 
     def __str__(self):
         return self.title

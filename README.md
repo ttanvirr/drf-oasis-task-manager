@@ -22,6 +22,8 @@
       - [2.6.7.1. Rewriting our API using class-based views](#2671-rewriting-our-api-using-class-based-views)
       - [2.6.7.2. Using mixins](#2672-using-mixins)
       - [2.6.7.3. Using generic class-based views](#2673-using-generic-class-based-views)
+  - [2.7. Authentication \& Permissions](#27-authentication--permissions)
+    - [2.7.1. Adding information to our model](#271-adding-information-to-our-model)
 
 # 1. Oasis task manager
 
@@ -699,3 +701,52 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
 We've gotten a huge amount for free, and our code looks like good, clean, idiomatic Django.
 
 Again, run the development server and make sure everything is working as expected.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+## 2.7. Authentication & Permissions
+
+Currently our API doesn't have any restrictions on who can edit or delete tasks. We'd like to have some more advanced behavior in order to make sure that:
+
+- Tasks are always associated with a creator.
+- Only authenticated users may create new tasks.
+- Only the creator of a task may update or delete it.
+- Unauthenticated requests should have full read-only access.
+
+### 2.7.1. Adding information to our model
+
+Let's add a field to our `Task` model to represent the user who created the task.
+
+`tasks/models.py/Task`
+
+```py
+class Task(models.Model):
+    # ...
+    owner = models.ForeignKey(
+        "auth.User", related_name="tasks", on_delete=models.CASCADE
+    )
+
+    # ...
+```
+
+When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for our convenience, let's just delete and recreate the database and start again.
+
+```bash
+createdb -U <db_user> <db_name>
+```
+
+the `<db_user>` and `<db_name>` should match the ones set in the `.env` file
+
+Then:
+
+```bash
+rm -r tasks/migrations
+uv run manage.py makemigrations snippets
+uv run manage.py migrate
+```
+
+You might also want to create a few different users, to use for testing the API. The quickest way to do this will be with the `createsuperuser` command. Let's create 3 superusers.
+
+```bash
+uv run manage.py createsuperuser
+```
