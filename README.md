@@ -20,6 +20,7 @@
     - [2.6.6. Browsability](#266-browsability)
     - [2.6.7. Class-based Views](#267-class-based-views)
       - [2.6.7.1. Rewriting our API using class-based views](#2671-rewriting-our-api-using-class-based-views)
+      - [2.6.7.2. Using mixins](#2672-using-mixins)
 
 # 1. Oasis task manager
 
@@ -591,3 +592,69 @@ urlpatterns = format_suffix_patterns(urlpatterns)
 Okay, we're done. If you run the development server everything should be working just as before.
 
 [⬆️ Return to Table of contents](#table-of-contents)
+
+#### 2.6.7.2. Using mixins
+
+Class-based views allows us to easily compose reusable behavior.
+
+The create/retrieve/update/delete operations that we've been using so far are going to be pretty similar for any model-backed API views we create. Those bits of common behavior are implemented in REST framework's mixin classes.
+
+Here's our `TaskList` view in `tasks/views.py` module again:
+
+```py
+from rest_framework import mixins, generics
+
+from .models import Task
+from .serializers import TaskSerializer
+
+class TaskList(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+    """
+    List all tasks (GET), or create a new task (POST).
+    """
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+    def get(self, request, *args, **kwargs):
+        # List all tasks
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # Create new task
+        return self.create(request, *args, **kwargs)
+```
+
+Here, we're building our view using `GenericAPIView`, and adding in `ListModelMixin` and `CreateModelMixin`.
+
+The base class provides the core functionality, and the mixin classes provide the `.list()` and `.create()` actions. We're then explicitly binding the `get` and `post` methods to the appropriate actions.
+
+Now modify the detail view:
+
+```py
+class TaskDetail(
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    generics.GenericAPIView,
+):
+    """
+    Retrieve (GET), update (PUT), or delete (DELETE) a single task.
+    """
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+    def get(self, request, *args, **kwargs):
+        # Get single task instance
+        return self.retrieve(request, *args, **kwargs)
+
+    def put(self, request, *args, **kwargs):
+        # Update single task instance
+        return self.update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        # Delete single task instance
+        return self.destroy(request, *args, **kwargs)
+```
+
+Again we're using the `GenericAPIView` class to provide the core functionality, and adding in mixins to provide the `.retrieve()`, `.update()` and `.destroy()` actions.
