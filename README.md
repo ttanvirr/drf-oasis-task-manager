@@ -658,3 +658,7 @@ class TaskDetail(
 ```
 
 Again we're using the `GenericAPIView` class to provide the core functionality, and adding in mixins to provide the `.retrieve()`, `.update()` and `.destroy()` actions.
+
+Run the development server and make sure everything is working as expected.
+
+[⬆️ Return to Table of contents](#table-of-contents)
