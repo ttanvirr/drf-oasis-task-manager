@@ -37,8 +37,8 @@
   - [2.8. Relationships \& Hyperlinked APIs](#28-relationships--hyperlinked-apis)
     - [2.8.1. Making sure our URL patterns are named](#281-making-sure-our-url-patterns-are-named)
     - [2.8.2. Update serializers](#282-update-serializers)
-  - [2.9. Creating an endpoint for the root of our API](#29-creating-an-endpoint-for-the-root-of-our-api)
-  - [Adding pagination](#adding-pagination)
+    - [2.8.3. Creating an endpoint for the root of our API](#283-creating-an-endpoint-for-the-root-of-our-api)
+    - [2.8.4. Adding pagination](#284-adding-pagination)
 
 # 1. Oasis task manager
 
@@ -1083,7 +1083,7 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
 Now browse to the `users/` endpoints and notice the `url` field and the `tasks` field that includes task urls instead of ids.
 
-## 2.9. Creating an endpoint for the root of our API
+### 2.8.3. Creating an endpoint for the root of our API
 
 Right now we have endpoints for `'tasks'` and `'users'`, but we don't have a single entry point to our API. To create one, we'll use a regular function-based view and the `@api_view` decorator we introduced earlier. In your `tasks/views.py` add:
 
@@ -1122,7 +1122,7 @@ urlpatterns = format_suffix_patterns(
 
 Now browse to http://localhost:8000/ and you should see a list of available endpoints.
 
-## Adding pagination
+### 2.8.4. Adding pagination
 
 The list views for `users` and `tasks` could end up returning quite a lot of instances, so really we'd like to make sure we paginate the results, and allow the API client to step through each of the individual pages.
 
