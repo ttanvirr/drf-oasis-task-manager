@@ -22,3 +22,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("tasks.urls")),
 ]
+
+urlpatterns += [
+    # include the login and logout views for the browsable API
+    path("api-auth/", include("rest_framework.urls")),
+]
