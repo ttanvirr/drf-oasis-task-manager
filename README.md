@@ -48,6 +48,7 @@
     - [2.10.1. `drf-spectacular`](#2101-drf-spectacular)
     - [2.10.2. Add the OpenAPI schema endpoint](#2102-add-the-openapi-schema-endpoint)
     - [2.10.3. Add Swagger UI](#2103-add-swagger-ui)
+    - [Give the API some proper identity](#give-the-api-some-proper-identity)
     - [2.10.4. ReDoc?](#2104-redoc)
   - [2.11. Next steps](#211-next-steps)
 
@@ -1306,11 +1307,9 @@ Outline of our Plan:
 
 ### 2.10.1. `drf-spectacular`
 
-REST framework recommends using third-party packages, like `drf-spectacular`, for generating and presenting OpenAPI schemas.
+REST framework recommends using third-party packages, like `drf-spectacular`, for generating and presenting OpenAPI 3 schemas.
 
-`drf-spectacular` is an `OpenAPI 3` schema generation library.
-
-The library inpects your DRF application, extract as much schema information from DRF as possible. There is explicit support for `swagger-codegen`, `SwaggerUI` and `Redoc`, i18n, versioning, authentication, polymorphism (dynamic requests and responses), query/path/header parameters, documentation and more.
+`drf-spectacular` library inpects your DRF application, extract as much schema information from DRF as possible. There is explicit support for `swagger-codegen`, `SwaggerUI` and `Redoc`, i18n, versioning, authentication, polymorphism (dynamic requests and responses), query/path/header parameters, documentation and more.
 
 Let's install [drf-spectacular](https://github.com/tfranzel/drf-spectacular/#installation) using `uv` tool:
 
@@ -1396,24 +1395,79 @@ That's OpenAPI schema.
 
 ### 2.10.3. Add Swagger UI
 
-Swagger UI reads that OpenAPI schema and gives you something like:
+Swagger UI reads that OpenAPI schema and creates the nice interactive documentation page.
+
+Open `config/urls.py` and import `SpectacularSwaggerView`:
+
+```py
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+```
+
+Then add this to the existing urlpatterns:
+
+```py
+urlpatterns = [
+    # Other patterns
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    # API Documentation
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+]
+
+# ...
+```
+
+Now visit: http://localhost:8000/api/docs/
+
+We should get Swagger UI documentation page.
+
+You should see your API operations automatically generated from your existing code:
 
 ```
-OAS 3.0
+tasks
+GET /tasks/
+POST /tasks/
 
+GET /tasks/{id}/
+PUT /tasks/{id}/
+PATCH /tasks/{id}/
+DELETE /tasks/{id}/
+
+USER
+GET /users/
+GET /users/{id}/
+```
+
+Your router is already defining those endpoints through `TaskViewSet` and `UserViewSet`.
+
+### Give the API some proper identity
+
+Right now, the generated documentation will work, but it won't yet feel like a polished public API.
+
+We'll improve that next.
+
+Add a `SPECTACULAR_SETTINGS` section to `config/settings.py`:
+
+```py
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Oasis Task Manager API",
+    "DESCRIPTION": "A RESTful API for managing users and tasks.",
+    "VERSION": "1.0.0",
+}
+```
+
+Now reload Swagger UI.
+
+You'll have:
+
+```
 Oasis Task Manager API
-
-Tasks
-  GET    /api/tasks/
-  POST   /api/tasks/
-
-  GET    /api/tasks/{id}/
-  PUT    /api/tasks/{id}/
-  PATCH  /api/tasks/{id}/
-  DELETE /api/tasks/{id}/
 ```
 
-with expandable request/response information and Try it out functionality.
+rather than an unnamed generic schema.
 
 ### 2.10.4. ReDoc?
 
