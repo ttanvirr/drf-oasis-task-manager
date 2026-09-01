@@ -42,6 +42,8 @@
   - [2.9. ViewSets \& Routers](#29-viewsets--routers)
     - [2.9.1. Refactoring to use ViewSets](#291-refactoring-to-use-viewsets)
     - [2.9.2. Binding ViewSets to URLs explicitly](#292-binding-viewsets-to-urls-explicitly)
+    - [2.9.3. Using Routers](#293-using-routers)
+    - [2.9.4. Trade-offs between views vs ViewSets](#294-trade-offs-between-views-vs-viewsets)
 
 # 1. Oasis task manager
 
@@ -1228,3 +1230,40 @@ urlpatterns = format_suffix_patterns(
     ]
 )
 ```
+
+### 2.9.3. Using Routers
+
+Because we're using `ViewSet` classes rather than `View` classes, we actually don't need to design the URLconf ourselves. The conventions for wiring up resources into views and urls can be handled automatically, using a `Router` class. All we need to do is register the appropriate view sets with a router, and let it do the rest.
+
+Here's our final `tasks/urls.py` file.
+
+```py
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from tasks import views
+
+# Create a router and register our ViewSets with it.
+router = DefaultRouter()
+router.register(r"tasks", views.TaskViewSet, basename="task")
+router.register(r"users", views.UserViewSet, basename="user")
+
+# The API URLs are now determined automatically by the router.
+urlpatterns = [
+    path("", include(router.urls)),
+]
+```
+
+Registering the `ViewSets` with the `router` is similar to providing a `urlpattern`. We include two arguments - the URL prefix for the views, and the view set itself.
+
+The `DefaultRouter` class we're using also automatically creates the API root view for us, so we deleted the `api_root` function from our views module.
+
+Run the development server and check that everything works as expected.
+
+### 2.9.4. Trade-offs between views vs ViewSets
+
+Using `ViewSets` helps ensure that URL conventions will be consistent across your API, minimizes the amount of code you need to write, and allows you to concentrate on the interactions and representations your API provides rather than the specifics of the URL conf.
+
+That doesn't mean it's always the right approach to take. There's a similar set of trade-offs to consider as when using class-based views instead of function-based views. Using ViewSets is less explicit than building your API views individually.
+
+[⬆️ Return to Table of contents](#table-of-contents)
