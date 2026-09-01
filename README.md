@@ -34,6 +34,10 @@
     - [2.7.6. Adding login to the Browsable API](#276-adding-login-to-the-browsable-api)
     - [2.7.7. Object level permissions](#277-object-level-permissions)
     - [2.7.8. Authenticating requests](#278-authenticating-requests)
+  - [2.8. Relationships \& Hyperlinked APIs](#28-relationships--hyperlinked-apis)
+    - [2.8.1. Making sure our URL patterns are named](#281-making-sure-our-url-patterns-are-named)
+    - [2.8.2. Update serializers](#282-update-serializers)
+  - [2.9. Creating an endpoint for the root of our API](#29-creating-an-endpoint-for-the-root-of-our-api)
 
 # 1. Oasis task manager
 
@@ -981,3 +985,138 @@ We haven't set up any authentication classes, so the defaults are currently appl
 
 > [!NOTE]
 > In a api testing app, like `Postman`, use Basic Authorization to authenticate while creating, deleting or updating tasks.
+
+## 2.8. Relationships & Hyperlinked APIs
+
+At the moment relationships within our API are represented by using `primary keys`. In this part of the tutorial we'll improve the cohesion and discoverability of our API, by instead using `hyperlinking` for relationships.
+
+Dealing with relationships between entities is one of the more challenging aspects of Web API design. There are a number of different ways that we might choose to represent a relationship:
+
+- Using primary keys.
+- Using hyperlinking between entities.
+- Using a unique identifying slug field on the related entity.
+- Using the default string representation of the related entity.
+- Nesting the related entity inside the parent representation.
+- Some other custom representation.
+
+REST framework supports all of these styles.
+
+In this case we'd like to use a hyperlinked style between entities. In order to do so, we'll modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.
+
+The `HyperlinkedModelSerializer` has the following differences from `ModelSerializer`:
+
+- It does not include the `id` field by default.
+- It includes a `url` field, using `HyperlinkedIdentityField`.
+- Relationships use `HyperlinkedRelatedField`, instead of `PrimaryKeyRelatedField`.
+
+### 2.8.1. Making sure our URL patterns are named
+
+If we're going to have a hyperlinked API, we need to make sure we name our URL patterns.
+
+The resulting `tasks/urls.py` file should look like this:
+
+```py
+from django.urls import path
+from rest_framework.urlpatterns import format_suffix_patterns
+
+from tasks import views
+
+# API endpoints
+urlpatterns = format_suffix_patterns(
+    [
+        path("tasks/", views.TaskList.as_view(), name="task-list"),
+        path("tasks/<int:pk>/", views.TaskDetail.as_view(), name="task-detail"),
+        path("users/", views.UserList.as_view(), name="user-list"),
+        path("users/<int:pk>/", views.UserDetail.as_view(), name="user-detail"),
+    ]
+)
+```
+
+### 2.8.2. Update serializers
+
+Modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.:
+
+`tasks/serializers.py`
+
+```py
+# ...
+
+class TaskSerializer(serializers.HyperlinkedModelSerializer):
+    # make the `owner` field read-only
+    owner = serializers.ReadOnlyField(source="owner.username")
+
+    class Meta:
+        model = Task
+        fields = [
+            "id",
+            "title",
+            "completed",
+            "important",
+            "created_at",
+            "updated_at",
+            "owner",
+        ]
+
+
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    tasks = serializers.HyperlinkedRelatedField(
+        many=True, view_name="task-detail", read_only=True
+    )
+
+    class Meta:
+        model = User
+        fields = ["url", "id", "username", "tasks"]
+```
+
+- The `url` field in the `UserSerializer` automatically points to `user-detail` url pattern.
+- The `tasks` field in the `UserSerializer` points to `task-detail` url pattern for each task which is set by `view_name="task-detail"`
+
+> [!NOTE]
+> When you are manually instantiating these serializers inside your views (e.g., in `TaskDetail` or `TaskList`), you must pass `context={'request': request}` so the serializer knows how to build absolute URLs. For example, instead of:
+>
+> `serializer = TaskSerializer(task)` You must write:
+>
+> `serializer = TaskSerializer(task, context={"request": request})`
+>
+> If your view is a subclass of `GenericAPIView`, you may use the `get_serializer_context()` as a convenience method.
+
+Now browse to the `users/` endpoints and notice the `url` field and the `tasks` field that includes task urls instead of ids.
+
+## 2.9. Creating an endpoint for the root of our API
+
+Right now we have endpoints for `'tasks'` and `'users'`, but we don't have a single entry point to our API. To create one, we'll use a regular function-based view and the `@api_view` decorator we introduced earlier. In your `tasks/views.py` add:
+
+```py
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
+
+@api_view(["GET"])
+def api_root(request, format=None):
+    return Response(
+        {
+            "users": reverse("user-list", request=request, format=format),
+            "tasks": reverse("task-list", request=request, format=format),
+        }
+    )
+```
+
+> [!IMPORTANT]
+> Import `reverse` from `rest_framework.reverse`
+
+Two things should be noticed here. First, we're using REST framework's `reverse` function in order to return fully-qualified URLs; second, URL patterns are identified by names in our `tasks/urls.py`.
+
+Let's update our `tasks/urls.py` file to include the `api_root` view:
+
+```py
+# ...
+
+urlpatterns = format_suffix_patterns(
+    [
+        path("", views.api_root, name="api-root"),
+        # ...
+    ]
+)
+```
+
+Now browse to http://localhost:8000/ and you should see a list of available endpoints.

@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import Task
 
 
-class TaskSerializer(serializers.ModelSerializer):
+class TaskSerializer(serializers.HyperlinkedModelSerializer):
     # make the `owner` field read-only
     owner = serializers.ReadOnlyField(source="owner.username")
 
@@ -21,9 +21,11 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
 
 
-class UserSerializer(serializers.ModelSerializer):
-    tasks = serializers.PrimaryKeyRelatedField(many=True, queryset=Task.objects.all())
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    tasks = serializers.HyperlinkedRelatedField(
+        many=True, view_name="task-detail", read_only=True
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "tasks"]
+        fields = ["url", "id", "username", "tasks"]
