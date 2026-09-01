@@ -153,3 +153,10 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# DRF SPECTACULAR (API Documentation)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Oasis Task Manager API",
+    "DESCRIPTION": "A RESTful API for managing users and tasks.",
+    "VERSION": "1.0.0",
+}
