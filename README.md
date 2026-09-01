@@ -38,6 +38,7 @@
     - [2.8.1. Making sure our URL patterns are named](#281-making-sure-our-url-patterns-are-named)
     - [2.8.2. Update serializers](#282-update-serializers)
   - [2.9. Creating an endpoint for the root of our API](#29-creating-an-endpoint-for-the-root-of-our-api)
+  - [Adding pagination](#adding-pagination)
 
 # 1. Oasis task manager
 
@@ -1120,3 +1121,18 @@ urlpatterns = format_suffix_patterns(
 ```
 
 Now browse to http://localhost:8000/ and you should see a list of available endpoints.
+
+## Adding pagination
+
+The list views for `users` and `tasks` could end up returning quite a lot of instances, so really we'd like to make sure we paginate the results, and allow the API client to step through each of the individual pages.
+
+We can change the default list style to use pagination, by modifying our `config/settings.py` file slightly. Add the following setting:
+
+```py
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}
+```
+
+We could also customize the pagination style if we needed to, but in this case we'll just stick with the default.
