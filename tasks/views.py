@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from rest_framework import generics, permissions
+from rest_framework import permissions, viewsets
 from rest_framework.reverse import reverse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -10,46 +10,27 @@ from .models import Task
 from .serializers import TaskSerializer, UserSerializer
 
 
-class TaskList(generics.ListCreateAPIView):
+class TaskViewSet(viewsets.ModelViewSet):
     """
-    List all tasks (GET), or create a new task (POST).
+    This ViewSet automatically provides `list`, `create`, `retrieve`,
+    `update` and `destroy` actions.
     """
 
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     # authenticated users can create new tasks,
+    # creator of a task can update or delete it
     # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
 
     def perform_create(self, serializer):
         # associate authenticated user with a new task
         serializer.save(owner=self.request.user)
 
 
-class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Retrieve (GET), update (PUT), or delete (DELETE) a single task.
-    """
-
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-    # creator of a task can update or delete it
-    # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
-
-
-class UserList(generics.ListAPIView):
-    """
-    List all users (GET).
-    """
-
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
-
-class UserDetail(generics.RetrieveAPIView):
-    """
-    Retrieve (GET) a single user.
+    This viewset automatically provides `list` and `retrieve` actions.
     """
 
     queryset = User.objects.all()

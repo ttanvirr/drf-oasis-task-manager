@@ -39,6 +39,9 @@
     - [2.8.2. Update serializers](#282-update-serializers)
     - [2.8.3. Creating an endpoint for the root of our API](#283-creating-an-endpoint-for-the-root-of-our-api)
     - [2.8.4. Adding pagination](#284-adding-pagination)
+  - [2.9. ViewSets \& Routers](#29-viewsets--routers)
+    - [2.9.1. Refactoring to use ViewSets](#291-refactoring-to-use-viewsets)
+    - [2.9.2. Binding ViewSets to URLs explicitly](#292-binding-viewsets-to-urls-explicitly)
 
 # 1. Oasis task manager
 
@@ -1136,3 +1139,92 @@ REST_FRAMEWORK = {
 ```
 
 We could also customize the pagination style if we needed to, but in this case we'll just stick with the default.
+
+## 2.9. ViewSets & Routers
+
+`ViewSets` allows the developer to concentrate on modeling the state and interactions of the API, and leave the URL construction to be handled automatically, based on common conventions.
+
+`ViewSet` classes are almost the same thing as `View` classes, except that they provide operations such as `retrieve`, or `update`, and not method handlers such as `get` or `put`.
+
+A `ViewSet` class is only bound to a set of method handlers at the last moment, when it is instantiated into a set of views, typically by using a `Router` class which handles the complexities of defining the URLconf for you.
+
+### 2.9.1. Refactoring to use ViewSets
+
+First of all let's refactor our `UserList` and `UserDetail` classes into a single `UserViewSet` class in the `tasks/views.py`:
+
+```py
+from rest_framework import viewsets
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    This viewset automatically provides `list` and `retrieve` actions.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+```
+
+Here we've used the `ReadOnlyModelViewSet` class to automatically provide the default 'read-only' operations. We're still setting the `queryset` and `serializer_class` attributes, but we no longer need to provide the same information to two separate classes.
+
+Next we're going to replace the `TaskList` and `TaskDetail` view classes with a single `TaskViewSet` class.
+
+```py
+from rest_framework import permissions, viewsets
+# ...
+
+class TaskViewSet(viewsets.ModelViewSet):
+    """
+    This ViewSet automatically provides `list`, `create`, `retrieve`,
+    `update` and `destroy` actions.
+    """
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+    # authenticated users can create new tasks,
+    # creator of a task can update or delete it
+    # any user has read access
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        # associate authenticated user with a new task
+        serializer.save(owner=self.request.user)
+```
+
+This time we've used the `ModelViewSet` class in order to get the complete set of default read and write operations.
+
+### 2.9.2. Binding ViewSets to URLs explicitly
+
+The handler methods only get bound to the actions when we define the URLConf. To see what's going on under the hood let's first explicitly create a set of views from our ViewSets.
+
+In the `tasks/urls.py` file we bind our ViewSet classes into a set of concrete views.
+
+```py
+# imports
+
+task_list = views.TaskViewSet.as_view({"get": "list", "post": "create"})
+task_detail = views.TaskViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+)
+user_list = views.UserViewSet.as_view({"get": "list"})
+user_detail = views.UserViewSet.as_view({"get": "retrieve"})
+```
+
+Notice how we're creating multiple views from each `ViewSet` class, by binding the `HTTP` methods to the required action for each view.
+
+Now we can register the views with the URLconf as usual.
+
+`tasks/urls.py`
+
+```py
+# ...
+
+urlpatterns = format_suffix_patterns(
+    [
+        path("", views.api_root, name="api-root"),
+        path("tasks/", task_list, name="task-list"),
+        path("tasks/<int:pk>/", task_detail, name="task-detail"),
+        path("users/", user_list, name="user-list"),
+        path("users/<int:pk>/", user_detail, name="user-detail"),
+    ]
+)
+```
