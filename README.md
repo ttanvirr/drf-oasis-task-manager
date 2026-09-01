@@ -44,6 +44,12 @@
     - [2.9.2. Binding ViewSets to URLs explicitly](#292-binding-viewsets-to-urls-explicitly)
     - [2.9.3. Using Routers](#293-using-routers)
     - [2.9.4. Trade-offs between views vs ViewSets](#294-trade-offs-between-views-vs-viewsets)
+  - [2.10. Documenting our API](#210-documenting-our-api)
+    - [2.10.1. `drf-spectacular`](#2101-drf-spectacular)
+    - [2.10.2. Add the OpenAPI schema endpoint](#2102-add-the-openapi-schema-endpoint)
+    - [2.10.3. Add Swagger UI](#2103-add-swagger-ui)
+    - [2.10.4. ReDoc?](#2104-redoc)
+  - [2.11. Next steps](#211-next-steps)
 
 # 1. Oasis task manager
 
@@ -1267,3 +1273,168 @@ Using `ViewSets` helps ensure that URL conventions will be consistent across you
 That doesn't mean it's always the right approach to take. There's a similar set of trade-offs to consider as when using class-based views instead of function-based views. Using ViewSets is less explicit than building your API views individually.
 
 [⬆️ Return to Table of contents](#table-of-contents)
+
+## 2.10. Documenting our API
+
+Outline of our Plan:
+
+```
+                   ┌──────────────────┐
+                   │   DRF API code   │
+                   │                  │
+                   │ serializers      │
+                   │ views/viewsets   │
+                   │ routers/URLs     │
+                   └────────┬─────────┘
+                            │
+                            ▼
+                   ┌──────────────────┐
+                   │ drf-spectacular  │
+                   │                  │
+                   │ OpenAPI 3 schema │
+                   └────────┬─────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+       ┌──────────────┐            ┌──────────────┐
+       │ Swagger UI   │            │    ReDoc     │
+       │              │            │              │
+       │ interactive  │            │ documentation│
+       │ API explorer │            │ reference    │
+       └──────────────┘            └──────────────┘
+```
+
+### 2.10.1. `drf-spectacular`
+
+REST framework recommends using third-party packages, like `drf-spectacular`, for generating and presenting OpenAPI schemas.
+
+`drf-spectacular` is an `OpenAPI 3` schema generation library.
+
+The library inpects your DRF application, extract as much schema information from DRF as possible. There is explicit support for `swagger-codegen`, `SwaggerUI` and `Redoc`, i18n, versioning, authentication, polymorphism (dynamic requests and responses), query/path/header parameters, documentation and more.
+
+Let's install [drf-spectacular](https://github.com/tfranzel/drf-spectacular/#installation) using `uv` tool:
+
+```bash
+uv add drf-spectacular
+```
+
+We don't need to install `Swagger UI` or `ReDoc` as separate Python packages. `drf-spectacular` provides the integration for both interfaces.
+
+Let's add `drf_spectacular` to `INSTALLED_APPS` in `config/settings.py`:
+
+```py
+INSTALLED_APPS = [
+    # ALL YOUR APPS
+    'drf_spectacular',
+]
+```
+
+And finally register our spectacular AutoSchema with DRF.
+
+`config/settings.py`
+
+```py
+REST_FRAMEWORK = {
+    # YOUR OTHER SETTINGS
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+```
+
+`AutoSchema` is the mechanism that allows `drf-spectacular` to inspect your DRF views and serializers and turn that information into an OpenAPI schema.
+
+### 2.10.2. Add the OpenAPI schema endpoint
+
+Now we need an endpoint that actually serves the OpenAPI schema.
+
+Open `config/urls.py` and add the import first:
+
+```py
+from drf_spectacular.views import SpectacularAPIView
+```
+
+Then add this to the existing urlpatterns:
+
+```py
+urlpatterns = [
+    # Other patterns
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+]
+
+# ...
+```
+
+Now start Django:
+
+```bash
+uv run manage.py runserver
+```
+
+Now visiting: http://127.0.0.1:8000/api/schema/
+
+is supposed to return/download the machine-readable OpenAPI schema/document (usually a yaml file) of the API. For example:
+
+```yaml
+paths:
+  /tasks/:
+    get:
+      # ...
+    post:
+      # ...
+
+  /tasks/{id}/:
+    get:
+      # ...
+    put:
+      # ...
+    patch:
+      # ...
+    delete:
+      # ...
+```
+
+That's OpenAPI schema.
+
+### 2.10.3. Add Swagger UI
+
+Swagger UI reads that OpenAPI schema and gives you something like:
+
+```
+OAS 3.0
+
+Oasis Task Manager API
+
+Tasks
+  GET    /api/tasks/
+  POST   /api/tasks/
+
+  GET    /api/tasks/{id}/
+  PUT    /api/tasks/{id}/
+  PATCH  /api/tasks/{id}/
+  DELETE /api/tasks/{id}/
+```
+
+with expandable request/response information and Try it out functionality.
+
+### 2.10.4. ReDoc?
+
+ReDoc is another presentation layer for the same OpenAPI schema.
+
+So you could have:
+
+```
+/openapi/schema/    → OpenAPI JSON/YAML
+/docs/              → Swagger UI
+/redoc/             → ReDoc
+```
+
+All three are ultimately based on the same API schema.
+
+We don't need both Swagger UI and ReDoc for a small project.
+
+For this project, we'd initially use Swagger UI because it is particularly useful while we're developing and testing the API.
+
+Later, if we want to demonstrate a more polished `documentation/reference` site, we can add ReDoc too.
+
+## 2.11. Next steps
+
+- Dockerize your API
