@@ -19,5 +19,5 @@ db.sqlite3
 media/
 staticfiles/
 
-# Other files
+# Others
 _secrets.txt
