@@ -53,7 +53,7 @@
       - [2.10.5.1. Edit the ViewSet docstrings](#21051-edit-the-viewset-docstrings)
       - [2.10.5.2. Customize the `TaskViewSet` documentation](#21052-customize-the-taskviewset-documentation)
       - [2.10.5.3. Customize the `UserViewSet` documentation](#21053-customize-the-userviewset-documentation)
-    - [2.10.6. ReDoc?](#2106-redoc)
+    - [2.10.6. ReDoc](#2106-redoc)
   - [2.11. Next steps](#211-next-steps)
 
 # 1. Oasis task manager
@@ -1680,7 +1680,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
 Again, reload Swagger UI and notice the changes in action.
 
-### 2.10.6. ReDoc?
+### 2.10.6. ReDoc
 
 ReDoc is the final presentation layer for the same OpenAPI schema.
 
