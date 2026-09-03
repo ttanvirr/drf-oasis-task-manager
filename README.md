@@ -1267,7 +1267,7 @@ urlpatterns = [
 
 Registering the `ViewSets` with the `router` is similar to providing a `urlpattern`. We include two arguments - the URL prefix for the views, and the view set itself.
 
-The `DefaultRouter` class we're using also automatically creates the API root view for us, so we deleted the `api_root` function from our views module.
+The `DefaultRouter` class we're using also automatically creates the API root view for us, so we can delete the `api_root` view function from our `tasks/views.py` module.
 
 Run the development server and check that everything works as expected.
 
