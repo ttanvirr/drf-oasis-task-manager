@@ -1,17 +1,14 @@
 from rest_framework import permissions
 
 
-class IsOwnerOrReadOnly(permissions.BasePermission):
+class IsOwnerOrAdmin(permissions.BasePermission):
     """
-    Custom permission to only allow owners of an object to edit it.
+    Custom permission that allows only the owner or a superuser to access an object.
+
     Assumes the model instance has an `owner` attribute.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Read permissions are allowed to any request,
-        # so we'll always allow GET, HEAD or OPTIONS requests.
-        if request.method in permissions.SAFE_METHODS:
-            return True
-
-        # Write permissions are only allowed if current user = owner of the requested object.
-        return obj.owner == request.user
+        # Access allowed if
+        # current user = owner of the requested object or a superuser.
+        return request.user.is_superuser or obj.owner == request.user

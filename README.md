@@ -34,7 +34,8 @@
     - [2.7.6. Adding required permissions to views](#276-adding-required-permissions-to-views)
     - [2.7.7. Adding login to the Browsable API](#277-adding-login-to-the-browsable-api)
     - [2.7.8. Object level permissions](#278-object-level-permissions)
-    - [2.7.9. Authenticating requests](#279-authenticating-requests)
+    - [2.7.9. Restricting Task lists](#279-restricting-task-lists)
+    - [2.7.10. Authenticating requests](#2710-authenticating-requests)
 
 # 1. Oasis task manager
 
@@ -719,10 +720,10 @@ Again, run the development server and make sure everything is working as expecte
 
 Currently our API doesn't have any restrictions on who can edit or delete tasks. We'd like to have some more advanced behavior in order to make sure that:
 
-- Tasks are always associated with a creator.
+- Only authenticated users may access the task and user endpoints.
 - Only authenticated users may create new tasks.
 - Only the creator of a task may update or delete it.
-- Unauthenticated requests should have full read-only access.
+- Superusers may access all tasks.
 
 ### 2.7.1. Adding owner field to our model
 
@@ -740,7 +741,7 @@ class Task(models.Model):
     # ...
 ```
 
-When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for our convenience, let's just delete and recreate the database and start again.
+When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for our convenience, let's just delete the existing database and migrations and then recreate the database using following command and start again.
 
 ```bash
 createdb -U <db_user> <db_name>
@@ -760,11 +761,13 @@ uv run manage.py migrate
 
 You might also want to create a few different users to test the API's authentication and object-level permissions.
 
-First, create some superusers:
+First, create a superuser:
 
 ```bash
 uv run manage.py createsuperuser
 ```
+
+Creat one or two more superusers using the same command.
 
 We'll also need some normal users. These can be created directly through the Django shell.
 
@@ -806,6 +809,8 @@ You should see something similar to:
     {'username': 'bob', 'is_superuser': False},
 ]>
 ```
+
+We'll use the superuser to test administrator access, and the normal users to test ownership restrictions.
 
 ### 2.7.3. Adding endpoints for our User models
 
@@ -857,6 +862,10 @@ class UserDetail(generics.RetrieveAPIView):
     serializer_class = UserSerializer
 ```
 
+The user views are intentionally read-only. We are not using `CreateAPIView`, `UpdateAPIView` or `DestroyAPIView` here because users should not be created, modified or deleted through these endpoints.
+
+Later on, user registration will be implemented separately using a dedicated endpoint.
+
 #### 2.7.3.3. Url patterns
 
 Finally we need to add those views into the API, by referencing them from the URLconf. Add the following to the patterns in `tasks/urls.py`.
@@ -866,7 +875,7 @@ path("users/", views.UserList.as_view()),
 path("users/<int:pk>/", views.UserDetail.as_view()),
 ```
 
-Check if the api endpoints show users or user.
+Open `/users/` and `/users/<id>/` in the browser and verify that the new endpoints return the expected user representations.
 
 ### 2.7.4. Associating tasks with users
 
@@ -911,9 +920,9 @@ The field we've added is the untyped `ReadOnlyField` class, in contrast to the o
 
 ### 2.7.6. Adding required permissions to views
 
-Now that tasks are associated with users, we want to make sure that tasks and users are able to be read, created, updated and delete based on authentication and ownership.
+Now that tasks are associated with users, we want to make sure that tasks and users can only be accessed based on authentication and ownership.
 
-At this stage, only authenticated users should be able to access tasks and users. Later, we will add object-level permissions to ensure that users can access only their own tasks and profiles, while superusers/admins can access all tasks and users.
+At this stage, we'll require users to be authenticated before accessing the task and user endpoints. We will add ownership restrictions in later sections.
 
 REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated`, which requires users to be authenticated before they can access the view.
 
@@ -923,11 +932,13 @@ REST framework includes a number of permission classes to restrict who can acces
    from rest_framework import permissions
    ```
 
-2. Then, add the following property to the `TasktList`, `TasktDetail`, `UserList` and `UserDetail` view classes.
+2. Then, add the following property to the `TaskList`, `TaskDetail`, `UserList` and `UserDetail` view classes.
 
    ```py
    permission_classes = [permissions.IsAuthenticated]
    ```
+
+This ensures that anonymous users cannot access any of these endpoints.
 
 ### 2.7.7. Adding login to the Browsable API
 
@@ -955,7 +966,7 @@ At the moment, any authenticated user can access tasks, including tasks created 
 We want to make our API creator-related:
 
 - A normal authenticated user can read, update and delete only their own tasks.
-- A admin/superuser can read, update and delete all tasks.
+- A superuser can read, update and delete all tasks.
 - Users must be authenticated to access the tasks and users.
 
 To enforce ownership at the object level, we need to create a custom permission.
@@ -995,11 +1006,39 @@ The `IsAuthenticated` permission ensures that only logged-in users can access th
 
 Now, check on a browser again.
 
-### 2.7.9. Authenticating requests
+### 2.7.9. Restricting Task lists
+
+The `TaskList` view needs an additional restriction. Unlike a detail view, a list view does not perform object-level permission checks on every object in the queryset. Therefore, we need to filter the queryset so that normal users only receive their own tasks.
+
+Update the `TaskList` view as follows:
+
+`tasks/views.py`
+
+```py
+class TaskList(generics.ListCreateAPIView):
+    """
+    List all tasks (GET), or create a new task (POST).
+    """
+
+    serializer_class = TaskSerializer
+    # authenticated users can read or create tasks,
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # associate authenticated user with a new task
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Task.objects.all()
+        return Task.objects.filter(owner=self.request.user)
+```
+
+### 2.7.10. Authenticating requests
 
 When we interact with the API through the web browser, we can login, and the browser session will then provide the required authentication for the requests.
 
-If we're interacting with the API programmatically we need to explicitly provide the authentication credentials on each request.
+When using HTTP Basic Authentication, the client sends the username and password with each request that requires authentication.
 
 If we try to create a task without authenticating, we'll get an error:
 
@@ -1027,7 +1066,5 @@ http -a <user>:<password> POST http://127.0.0.1:8000/tasks/ title="Some task"
 }
 ```
 
-We haven't set up any authentication classes, so the defaults are currently applied, which are `SessionAuthentication` and `BasicAuthentication`.
-
-> [!NOTE]
-> In a api testing app, like `Postman`, use Basic Authorization to authenticate while creating, deleting or updating tasks.
+We haven't set up any custom authentication classes, so DRF's defaults are currently applied, which are `SessionAuthentication` and `BasicAuthentication`.
+So, in a client application, we can use Basic Authorization (providing a username and password) to authenticate while creating, deleting or updating tasks.

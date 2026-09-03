@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions
 
-from tasks.permissions import IsOwnerOrReadOnly
+from tasks.permissions import IsOwnerOrAdmin
 
 from .models import Task
 from .serializers import TaskSerializer, UserSerializer
@@ -12,7 +12,6 @@ class TaskList(generics.ListCreateAPIView):
     List all tasks (GET), or create a new task (POST).
     """
 
-    queryset = Task.objects.all()
     serializer_class = TaskSerializer
     # authenticated users can read or create tasks,
     permission_classes = [permissions.IsAuthenticated]
@@ -20,6 +19,11 @@ class TaskList(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # associate authenticated user with a new task
         serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Task.objects.all()
+        return Task.objects.filter(owner=self.request.user)
 
 
 class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
@@ -30,7 +34,7 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     # Authenticated users can access tasks (read, update, delete).
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
 
 class UserList(generics.ListAPIView):
