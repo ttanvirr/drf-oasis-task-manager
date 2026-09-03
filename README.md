@@ -52,7 +52,7 @@
     - [2.10.5. Document the actual API properly](#2105-document-the-actual-api-properly)
       - [2.10.5.1. Edit the ViewSet docstrings](#21051-edit-the-viewset-docstrings)
       - [2.10.5.2. Customize the `TaskViewSet` documentation](#21052-customize-the-taskviewset-documentation)
-      - [2.10.5.2. Customize the `UserViewSet` documentation](#21052-customize-the-userviewset-documentation)
+      - [2.10.5.3. Customize the `UserViewSet` documentation](#21053-customize-the-userviewset-documentation)
     - [2.10.6. ReDoc?](#2106-redoc)
   - [2.11. Next steps](#211-next-steps)
 
@@ -1642,7 +1642,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 Now reload Swagger UI and notice the changes in action.
 
-#### 2.10.5.2. Customize the `UserViewSet` documentation
+#### 2.10.5.3. Customize the `UserViewSet` documentation
 
 Add a `@extend_schema_view` decorator to `UserViewSet`:
 
@@ -1682,23 +1682,28 @@ Again, reload Swagger UI and notice the changes in action.
 
 ### 2.10.6. ReDoc?
 
-ReDoc is another presentation layer for the same OpenAPI schema.
+ReDoc is the final presentation layer for the same OpenAPI schema.
 
-So you could have:
+We just need to add the urlpattern for ReDoc:
 
+`config/urls.py`
+
+```py
+from drf_spectacular.views import SpectacularRedocView
+
+urlpatterns = [
+    # ...
+    path(
+        "api/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
+]
 ```
-/openapi/schema/    → OpenAPI JSON/YAML
-/docs/              → Swagger UI
-/redoc/             → ReDoc
-```
 
-All three are ultimately based on the same API schema.
+Now visit: http://localhost:8000/api/redoc/ to see the final presentation layer.
 
-We don't need both Swagger UI and ReDoc for a small project.
-
-For this project, we'd initially use Swagger UI because it is particularly useful while we're developing and testing the API.
-
-Later, if we want to demonstrate a more polished `documentation/reference` site, we can add ReDoc too.
+That's all about documenting our API.
 
 ## 2.11. Next steps
 
