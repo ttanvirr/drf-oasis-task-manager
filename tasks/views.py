@@ -14,9 +14,8 @@ class TaskList(generics.ListCreateAPIView):
 
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-    # authenticated users can create new tasks,
-    # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # authenticated users can read or create tasks,
+    permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
         # associate authenticated user with a new task
@@ -30,9 +29,8 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
 
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-    # creator of a task can update or delete it
-    # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    # Authenticated users can access tasks (read, update, delete).
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class UserList(generics.ListAPIView):
@@ -42,6 +40,8 @@ class UserList(generics.ListAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    # Authenticated users can access users (read).
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class UserDetail(generics.RetrieveAPIView):
@@ -51,3 +51,5 @@ class UserDetail(generics.RetrieveAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    # Authenticated users can access his profile (read).
+    permission_classes = [permissions.IsAuthenticated]

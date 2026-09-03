@@ -865,9 +865,9 @@ The field we've added is the untyped `ReadOnlyField` class, in contrast to the o
 
 ### 2.7.5. Adding required permissions to views
 
-Now that tasks are associated with users, we want to make sure that tasks are able to be read, created, updated and delete based on authentication and ownership.
+Now that tasks are associated with users, we want to make sure that tasks and users are able to be read, created, updated and delete based on authentication and ownership.
 
-At this stage, only authenticated users should be able to access tasks. Later, we will add object-level permissions to ensure that users can access only their own tasks, while superusers/admins can access all tasks.
+At this stage, only authenticated users should be able to access tasks and users. Later, we will add object-level permissions to ensure that users can access only their own tasks and profiles, while superusers/admins can access all tasks and users.
 
 REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated`, which requires users to be authenticated before they can access the view.
 
@@ -877,7 +877,7 @@ REST framework includes a number of permission classes to restrict who can acces
    from rest_framework import permissions
    ```
 
-2. Then, add the following property to both the `TasktList` and `TasktDetail` view classes.
+2. Then, add the following property to the `TasktList`, `TasktDetail`, `UserList` and `UserDetail` view classes.
 
    ```py
    permission_classes = [permissions.IsAuthenticated]
