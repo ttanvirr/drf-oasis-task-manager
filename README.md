@@ -886,9 +886,11 @@ The field we've added is the untyped `ReadOnlyField` class, in contrast to the o
 
 ### 2.7.5. Adding required permissions to views
 
-Now that tasks are associated with users, we want to make sure that only authenticated users are able to create, update and delete tasks.
+Now that tasks are associated with users, we want to make sure that tasks are able to be read, created, updated and delete based on authentication and ownership.
 
-REST framework includes a number of permission classes to restrict who can access a given view. In this case we'll use `IsAuthenticatedOrReadOnly`, which will ensure that authenticated requests get read-write access, and unauthenticated requests get read-only access.
+At this stage, only authenticated users should be able to access tasks. Later, we will add object-level permissions to ensure that users can access only their own tasks, while superusers/admins can access all tasks.
+
+REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated`, which requires users to be authenticated before they can access the view.
 
 1. First add the following import in the `tasks/views.py` module
 
@@ -899,7 +901,7 @@ REST framework includes a number of permission classes to restrict who can acces
 2. Then, add the following property to both the `TasktList` and `TasktDetail` view classes.
 
    ```py
-   permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+   permission_classes = [permissions.IsAuthenticated]
    ```
 
 ### 2.7.6. Adding login to the Browsable API
@@ -1267,7 +1269,7 @@ urlpatterns = [
 
 Registering the `ViewSets` with the `router` is similar to providing a `urlpattern`. We include two arguments - the URL prefix for the views, and the view set itself.
 
-The `DefaultRouter` class we're using also automatically creates the API root view for us, so we can delete the `api_root` view function from our `tasks/views.py` module.
+The `DefaultRouter` class we're using also automatically creates the API root view for us, so, at this point let's delete the `api_root` view function from our `tasks/views.py` module.
 
 Run the development server and check that everything works as expected.
 
