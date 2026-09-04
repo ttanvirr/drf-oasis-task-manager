@@ -1,6 +1,16 @@
 from rest_framework import permissions
 
 
+class IsSuperuser(permissions.BasePermission):
+    """
+    Custom permission that allows only superusers to access an object.
+    """
+
+    def has_permission(self, request, view):
+        # Access allowed if current user is a superuser.
+        return request.user.is_superuser
+
+
 class IsOwnerOrAdmin(permissions.BasePermission):
     """
     Custom permission that allows only the owner or a superuser to access an object.
