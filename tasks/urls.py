@@ -9,6 +9,8 @@ urlpatterns = format_suffix_patterns(
         path("", views.api_root, name="api-root"),
         path("tasks/", views.TaskList.as_view(), name="task-list"),
         path("tasks/<int:pk>/", views.TaskDetail.as_view(), name="task-detail"),
+        path("users/register/", views.UserRegistration.as_view(), name="user-register"),
+        path("users/me/", views.UserMe.as_view(), name="user-me"),
         path("users/", views.UserList.as_view(), name="user-list"),
         path("users/<int:pk>/", views.UserDetail.as_view(), name="user-detail"),
     ]
