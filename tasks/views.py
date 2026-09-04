@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions
 
-from tasks.permissions import IsOwnerOrAdmin
+from tasks.permissions import IsOwnerOrAdmin, IsSuperuser
 
 from .models import Task
 from .serializers import TaskSerializer, UserRegistrationSerializer, UserSerializer
@@ -44,8 +44,6 @@ class UserRegistration(generics.CreateAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
-    # Allow anyone to register
-    permission_classes = [permissions.AllowAny]
 
 
 class UserMe(generics.RetrieveUpdateAPIView):
@@ -70,7 +68,7 @@ class UserList(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     # authenticated users can read users
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 
 
 class UserDetail(generics.RetrieveUpdateAPIView):
@@ -80,4 +78,4 @@ class UserDetail(generics.RetrieveUpdateAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]

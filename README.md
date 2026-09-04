@@ -30,14 +30,14 @@
       - [2.7.3.2. User views](#2732-user-views)
       - [2.7.3.3. Url patterns](#2733-url-patterns)
     - [2.7.4. Adding required permissions to user views](#274-adding-required-permissions-to-user-views)
-    - [2.7.5. Associating tasks with users](#275-associating-tasks-with-users)
-    - [2.7.6. Updating our `TaskSerializer`](#276-updating-our-taskserializer)
-    - [2.7.7. Adding required permissions to task views](#277-adding-required-permissions-to-task-views)
-    - [2.7.8. Adding login to the Browsable API](#278-adding-login-to-the-browsable-api)
-    - [2.7.9. Object level permissions](#279-object-level-permissions)
-    - [2.7.10. Restricting Task lists](#2710-restricting-task-lists)
-    - [2.7.11. Restricting User endpoints](#2711-restricting-user-endpoints)
-    - [2.7.12. Authenticating requests](#2712-authenticating-requests)
+    - [2.7.5. Adding login to the Browsable API](#275-adding-login-to-the-browsable-api)
+    - [2.7.6. Object level permissions to users](#276-object-level-permissions-to-users)
+    - [2.7.7. Associating tasks with users](#277-associating-tasks-with-users)
+    - [2.7.8. Updating our `TaskSerializer`](#278-updating-our-taskserializer)
+    - [2.7.9. Adding required permissions to task views](#279-adding-required-permissions-to-task-views)
+    - [2.7.10. Object level permissions to tasks](#2710-object-level-permissions-to-tasks)
+    - [2.7.11. Restricting Task lists](#2711-restricting-task-lists)
+    - [2.7.13. Authenticating requests](#2713-authenticating-requests)
 
 # 1. Oasis task manager
 
@@ -956,7 +956,7 @@ Open the browsable API in the browser and verify that the new endpoints return t
 
 We want to make sure that users can only be accessed based on authentication.
 
-REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `AllowAny`, and `IsAuthenticated`.
+REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated` which requires users to be authenticated before they can access the view.
 
 1. First add the following import in the `tasks/views.py` module
 
@@ -964,13 +964,9 @@ REST framework includes a number of permission classes to restrict who can acces
    from rest_framework import permissions
    ```
 
-2. Then, add the permission classes to the user views.
+2. Then, add the permission classes to the `UserMe`, `UserList` and `UserDetail` views.
 
    ```py
-   class UserRegistration(generics.CreateAPIView):
-        # Allow anyone to register
-        permission_classes = [permissions.AllowAny]
-
     class UserMe(generics.RetrieveUpdateAPIView):
         # authenticated users can read or update their own profile
         permission_classes = [permissions.IsAuthenticated]
@@ -984,11 +980,75 @@ REST framework includes a number of permission classes to restrict who can acces
         permission_classes = [permissions.IsAuthenticated]
    ```
 
-Open the browsable API in the browser and verify that the new endpoints return the expected user representations.
+We didn't add a permission class to the `UserRegistration` view, because we want unauthenticated users to be able to register.
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
-### 2.7.5. Associating tasks with users
+### 2.7.5. Adding login to the Browsable API
+
+At this stage, we'll include the login and logout views for the browsable API to allow users to log in and log out easily.
+
+At the end of our project-level `config/urls.py` file, add a pattern to include the login and logout views for the browsable API.
+
+```py
+urlpatterns += [
+    # include the login and logout views for the browsable API
+    path("api-auth/", include("rest_framework.urls")),
+]
+```
+
+The `'api-auth/'` part of pattern can actually be whatever URL you want to use.
+
+Now if you open up the browser again and refresh the page you'll see a `'Login'` link in the top right of the page which redirects to `/api-auth/login/` page. If you log in as one of the users you created earlier, you'll be able to do permitted actions on the API.
+
+Try to create some new users using the registration view and login with a normal user.
+Then navigate to the `'/users/me/'` endpoint, the user will only be able to see their own profile. Check that other endpoints also work as expected.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.6. Object level permissions to users
+
+At the moment, any authenticated user can access other users.
+
+We want to make our API creator-related.
+
+To enforce ownership at the object level, we need to create a custom permission.
+
+In the `tasks` app, create a new file, `permissions.py` with following content:
+
+`tasks/permissions.py`
+
+```py
+from rest_framework import permissions
+
+class IsSuperuser(permissions.BasePermission):
+    """
+    """
+
+    def has_object_permission(self, request, view, obj):
+        return request.user.is_superuser
+```
+
+Now add that custom permission, by editing the `permission_classes` property on the `UserList` and `UserDetail` view class.
+
+`tasks/views.py`
+
+```py
+from tasks.permissions import IsOwnerOrAdmin
+
+class UserList(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
+
+
+class UserDetail(generics.RetrieveUpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
+```
+
+The `IsAuthenticated` permission ensures that only logged-in users can access the endpoint.
+
+Now, check on a browser again.
+
+### 2.7.7. Associating tasks with users
 
 Right now, if we created a task, there'd be no way of associating the user that created the task, with the task instance. The user isn't sent as part of the serialized representation, but is instead a property of the incoming request.
 
@@ -1013,7 +1073,7 @@ The `create()` method of our serializer will now be passed an additional `'owner
 >
 > This is why the view saves the authenticated (logged in) user as the `owner`. Here `self.request.user` is the authenticated user.
 
-### 2.7.6. Updating our `TaskSerializer`
+### 2.7.8. Updating our `TaskSerializer`
 
 Now that tasks are associated with the user that created them, let's update our `TaskSerializer` to reflect that.
 
@@ -1029,7 +1089,7 @@ The `source` argument controls which attribute is used to populate a field (and 
 
 The field we've added is the untyped `ReadOnlyField` class, in contrast to the other typed fields, such as `CharField`, `BooleanField` etc... The untyped `ReadOnlyField` is always read-only, and will be used for serialized representations, but will not be used for updating model instances when they are deserialized. We could have also used `CharField(read_only=True)` here.
 
-### 2.7.7. Adding required permissions to task views
+### 2.7.9. Adding required permissions to task views
 
 Now that tasks are associated with users, we want to make sure that tasks and users can only be accessed based on authentication and ownership.
 
@@ -1051,26 +1111,7 @@ REST framework includes a number of permission classes to restrict who can acces
 
 This ensures that anonymous users cannot access any of these endpoints.
 
-### 2.7.8. Adding login to the Browsable API
-
-If you open a browser and navigate to the browsable API at the moment, you'll find that you're no longer able to create new tasks. In order to do so we'd need to be able to login as a user.
-
-At the end of our project-level `config/urls.py` file, add a pattern to include the login and logout views for the browsable API.
-
-```py
-urlpatterns += [
-    # include the login and logout views for the browsable API
-    path("api-auth/", include("rest_framework.urls")),
-]
-```
-
-The `'api-auth/'` part of pattern can actually be whatever URL you want to use.
-
-Now if you open up the browser again and refresh the page you'll see a `'Login'` link in the top right of the page which redirects to `/api-auth/login/` page. If you log in as one of the users you created earlier, you'll be able to create tasks again (as well as update and delete any tasks even that were created by other users, which we'll fix next).
-
-Once you've created a few tasks, navigate to the `'/users/'` endpoint, and notice that the representation includes a list of the task ids that are associated with each user, in each user's `'tasks'` field.
-
-### 2.7.9. Object level permissions
+### 2.7.10. Object level permissions to tasks
 
 At the moment, any authenticated user can access tasks, including tasks created by other users.
 
@@ -1117,7 +1158,7 @@ The `IsAuthenticated` permission ensures that only logged-in users can access th
 
 Now, check on a browser again.
 
-### 2.7.10. Restricting Task lists
+### 2.7.11. Restricting Task lists
 
 The `TaskList` view needs an additional restriction. Unlike a detail view, a list view does not perform object-level permission checks on every object in the queryset. Therefore, we need to filter the queryset so that normal users only receive their own tasks.
 
@@ -1145,9 +1186,7 @@ class TaskList(generics.ListCreateAPIView):
         return Task.objects.filter(owner=self.request.user)
 ```
 
-### 2.7.11. Restricting User endpoints
-
-### 2.7.12. Authenticating requests
+### 2.7.13. Authenticating requests
 
 When we interact with the API through the web browser, we can login, and the browser session will then provide the required authentication for the requests.
 
