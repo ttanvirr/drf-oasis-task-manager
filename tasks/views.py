@@ -60,9 +60,9 @@ class UserMe(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
-class UserList(generics.ListAPIView):
+class UserList(generics.ListCreateAPIView):
     """
-    List all users (GET).
+    List all users (GET), or create a new user (POST).
     """
 
     queryset = User.objects.all()
