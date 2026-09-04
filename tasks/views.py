@@ -1,3 +1,5 @@
+from venv import create
+
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions, viewsets
 from rest_framework.reverse import reverse
@@ -164,13 +166,13 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Task.objects.filter(owner=self.request.user)
 
 
-@extend_schema_view(
+@extend_schema(
     summary="Register a new user",
     description="Create a new user account.",
     request=UserRegistrationSerializer,
     responses={
         201: OpenApiResponse(
-            response=UserSerializer,
+            response=UserRegistrationSerializer,
             description="The user account was successfully created.",
         ),
         400: OpenApiResponse(
@@ -196,6 +198,23 @@ class UserRegistration(generics.CreateAPIView):
             200: OpenApiResponse(
                 response=UserSerializer,
                 description="A paginated list of users.",
+            ),
+        },
+    ),
+    create=extend_schema(
+        summary="Create a user",
+        description="Create a new user. Only a superuser can create a user.",
+        request=UserSerializer,
+        responses={
+            201: OpenApiResponse(
+                response=UserSerializer,
+                description="The user was successfully created.",
+            ),
+            400: OpenApiResponse(
+                description="The request data is invalid.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not a superuser.",
             ),
         },
     ),
