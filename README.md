@@ -1262,7 +1262,7 @@ Dealing with relationships between entities is one of the more challenging aspec
 
 REST framework supports all of these styles.
 
-In this case we'd like to use a hyperlinked style between entities. In order to do so, we'll modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.
+In this case we'd like to use a hyperlinked style between entities. In order to do so, we'll modify some of our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.
 
 The `HyperlinkedModelSerializer` has the following differences from `ModelSerializer`:
 
@@ -1287,6 +1287,8 @@ urlpatterns = format_suffix_patterns(
     [
         path("tasks/", views.TaskList.as_view(), name="task-list"),
         path("tasks/<int:pk>/", views.TaskDetail.as_view(), name="task-detail"),
+        path("users/register/", views.UserRegistration.as_view(), name="user-register"),
+        path("users/me/", views.UserMe.as_view(), name="user-me"),
         path("users/", views.UserList.as_view(), name="user-list"),
         path("users/<int:pk>/", views.UserDetail.as_view(), name="user-detail"),
     ]
@@ -1295,7 +1297,7 @@ urlpatterns = format_suffix_patterns(
 
 ### 2.8.2. Update serializers
 
-Modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.:
+Modify some of our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.:
 
 `tasks/serializers.py`
 
@@ -1328,6 +1330,8 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         model = User
         fields = ["url", "id", "username", "tasks"]
 ```
+
+> Keep the `UserRegistrationSerializer` the same as before.
 
 - The `url` field in the `UserSerializer` automatically points to `user-detail` url pattern.
 - The `tasks` field in the `UserSerializer` points to `task-detail` url pattern for each task which is set by `view_name="task-detail"`
@@ -1397,6 +1401,8 @@ REST_FRAMEWORK = {
 
 We could also customize the pagination style if we needed to, but in this case we'll just stick with the default.
 
+[⬆️ Return to Table of contents](#table-of-contents)
+
 ## 2.9. ViewSets & Routers
 
 `ViewSets` allows the developer to concentrate on modeling the state and interactions of the API, and leave the URL construction to be handled automatically, based on common conventions.
@@ -1407,21 +1413,59 @@ A `ViewSet` class is only bound to a set of method handlers at the last moment, 
 
 ### 2.9.1. Refactoring to use ViewSets
 
-First of all let's refactor our `UserList` and `UserDetail` classes into a single `UserViewSet` class in the `tasks/views.py`:
+First of all let's refactor our `UserMe`, `UserList` and `UserDetail` into a single `UserViewSet` ViewSet class but keep the existing `UserRegistration` view to use generic view class. In `tasks/views.py`:
 
 ```py
 from rest_framework import viewsets
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+class UserRegistration(generics.CreateAPIView):
     """
-    This viewset automatically provides `list` and `retrieve` actions.
+    Create a new user account.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for user management.
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
+    def get_permissions(self):
+        if self.action == "me":
+            return [permissions.IsAuthenticated()]
+        return [
+            permissions.IsAuthenticated(),
+            IsSuperuser(),
+        ]
+
+    @action(detail=False, methods=["get", "put", "patch"])
+    def me(self, request):
+        """
+        Retrieve or update the currently authenticated user.
+        """
+
+        if request.method == "GET":
+            serializer = self.get_serializer(request.user)
+            return Response(serializer.data)
+
+        serializer = self.get_serializer(
+            request.user,
+            data=request.data,
+            partial=request.method == "PATCH",
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
 ```
 
-Here we've used the `ReadOnlyModelViewSet` class to automatically provide the default 'read-only' operations. We're still setting the `queryset` and `serializer_class` attributes, but we no longer need to provide the same information to two separate classes.
+Here we've used the `ModelViewSet` class to automatically provide the `list`, `create`, `retrieve`, `update` and `destroy` operations. We're still setting the `queryset` and `serializer_class` attributes, but we no longer need to provide the same information to two separate classes.
 
 Next we're going to replace the `TaskList` and `TaskDetail` view classes with a single `TaskViewSet` class.
 
@@ -1431,23 +1475,24 @@ from rest_framework import permissions, viewsets
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
-    This ViewSet automatically provides `list`, `create`, `retrieve`,
-    `update` and `destroy` actions.
+    This ViewSet automatically provides `list`, `create`, `retrieve`, `update`, `partial_update` and `destroy` actions.
     """
 
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     # authenticated users can create new tasks,
     # creator of a task can update or delete it
-    # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
     def perform_create(self, serializer):
         # associate authenticated user with a new task
         serializer.save(owner=self.request.user)
-```
 
-This time we've used the `ModelViewSet` class in order to get the complete set of default read and write operations.
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Task.objects.all()
+        return Task.objects.filter(owner=self.request.user)
+```
 
 ### 2.9.2. Binding ViewSets to URLs explicitly
 
@@ -1462,6 +1507,7 @@ task_list = views.TaskViewSet.as_view({"get": "list", "post": "create"})
 task_detail = views.TaskViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
 )
+user_me = views.UserViewSet.as_view({"get": "me", "put": "me", "patch": "me"})
 user_list = views.UserViewSet.as_view({"get": "list"})
 user_detail = views.UserViewSet.as_view({"get": "retrieve"})
 ```
@@ -1480,6 +1526,8 @@ urlpatterns = format_suffix_patterns(
         path("", views.api_root, name="api-root"),
         path("tasks/", task_list, name="task-list"),
         path("tasks/<int:pk>/", task_detail, name="task-detail"),
+        path("users/register/", views.UserRegistration.as_view(), name="user-registration"),
+        path("users/me/", user_me, name="user-me"),
         path("users/", user_list, name="user-list"),
         path("users/<int:pk>/", user_detail, name="user-detail"),
     ]
@@ -1506,12 +1554,14 @@ router.register(r"users", views.UserViewSet, basename="user")
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
     path("", include(router.urls)),
+    path("users/register/", views.UserRegistration.as_view(), name="user-registration"),
 ]
+
 ```
 
 Registering the `ViewSets` with the `router` is similar to providing a `urlpattern`. We include two arguments - the URL prefix for the views, and the view set itself.
 
-The `DefaultRouter` class we're using also automatically creates the API root view for us, so we deleted the `api_root` function from our views module.
+The `DefaultRouter` class we're using also automatically creates the API root view for us, so we can remove the `api_root` function from our views module.
 
 Run the development server and check that everything works as expected.
 
