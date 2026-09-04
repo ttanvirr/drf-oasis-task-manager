@@ -24,16 +24,20 @@
       - [2.6.7.3. Using generic class-based views](#2673-using-generic-class-based-views)
   - [2.7. Authentication \& Permissions](#27-authentication--permissions)
     - [2.7.1. Adding owner field to our model](#271-adding-owner-field-to-our-model)
-    - [2.7.2. Adding endpoints for our User models](#272-adding-endpoints-for-our-user-models)
-      - [2.7.2.1. Create UserSerializer](#2721-create-userserializer)
-      - [2.7.2.2. User views](#2722-user-views)
-      - [2.7.2.3. Url patterns](#2723-url-patterns)
-    - [2.7.3. Associating tasks with users](#273-associating-tasks-with-users)
-    - [2.7.4. Updating our `TaskSerializer`](#274-updating-our-taskserializer)
-    - [2.7.5. Adding required permissions to views](#275-adding-required-permissions-to-views)
-    - [2.7.6. Adding login to the Browsable API](#276-adding-login-to-the-browsable-api)
-    - [2.7.7. Object level permissions](#277-object-level-permissions)
-    - [2.7.8. Authenticating requests](#278-authenticating-requests)
+    - [2.7.2. Creating test users](#272-creating-test-users)
+    - [2.7.3. Adding endpoints for our User models](#273-adding-endpoints-for-our-user-models)
+      - [2.7.3.1. Create UserSerializer](#2731-create-userserializer)
+      - [2.7.3.2. User views](#2732-user-views)
+      - [2.7.3.3. Url patterns for user views](#2733-url-patterns-for-user-views)
+    - [2.7.4. Adding required permissions to user views](#274-adding-required-permissions-to-user-views)
+    - [2.7.5. Adding login to the Browsable API](#275-adding-login-to-the-browsable-api)
+    - [2.7.6. Restricting access to users](#276-restricting-access-to-users)
+    - [2.7.7. Associating tasks with users](#277-associating-tasks-with-users)
+    - [2.7.8. Updating our `TaskSerializer`](#278-updating-our-taskserializer)
+    - [2.7.9. Adding required permissions to task views](#279-adding-required-permissions-to-task-views)
+    - [2.7.10. Object level permissions to tasks](#2710-object-level-permissions-to-tasks)
+    - [2.7.11. Restricting Task lists](#2711-restricting-task-lists)
+    - [2.7.12. Authenticating requests](#2712-authenticating-requests)
   - [2.8. Relationships \& Hyperlinked APIs](#28-relationships--hyperlinked-apis)
     - [2.8.1. Making sure our URL patterns are named](#281-making-sure-our-url-patterns-are-named)
     - [2.8.2. Update serializers](#282-update-serializers)
@@ -721,18 +725,24 @@ Again, run the development server and make sure everything is working as expecte
 
 ## 2.7. Authentication & Permissions
 
-Currently our API doesn't have any restrictions on who can edit or delete tasks. We'd like to have some more advanced behavior in order to make sure that:
+Currently, our API does not have any restrictions on who can access or modify tasks and users. We'd like to add authentication and permissions so that:
 
-- Tasks are always associated with a creator.
-- Only authenticated users may create new tasks.
+- Users can create their own accounts.
+- Users can log in and authenticate API requests.
+- Users can read and update only their own profile.
+- Superusers can read and update other users.
+- Tasks are always associated with their creator.
+- Only authenticated users may create tasks.
 - Only the creator of a task may update or delete it.
-- Unauthenticated requests should have full read-only access.
+- Unauthenticated users may still read tasks.
+
+We will use Django's built-in User model and DRF's built-in token authentication.
 
 ### 2.7.1. Adding owner field to our model
 
-Let's add a field to our `Task` model to represent the user who created the task.
+To associate every task with the user who created it, we'll add an owner field to our Task model.
 
-`tasks/models.py/Task`
+Edit `tasks/models.py`:
 
 ```py
 class Task(models.Model):
@@ -744,15 +754,16 @@ class Task(models.Model):
     # ...
 ```
 
-When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for our convenience, let's just delete and recreate the database and start again.
+When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for this development project, let's just recreate the database and migrations.
+
+First, drop and recreate the database using the database credentials from the `.env` file:
 
 ```bash
+dropdb -U <db_user> <db_name>
 createdb -U <db_user> <db_name>
 ```
 
-the `<db_user>` and `<db_name>` should match the ones set in the `.env` file
-
-Then:
+Then recreate the migrations and database tables:
 
 ```bash
 rm -r tasks/migrations
@@ -760,23 +771,109 @@ uv run manage.py makemigrations tasks
 uv run manage.py migrate
 ```
 
-You might also want to create a few different users, to use for testing the API. The quickest way to do this will be with the `createsuperuser` command. Let's create 3 superusers.
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.2. Creating test users
+
+We'll create a few different users to test the API's authentication and object-level permissions.
+
+First, create a superuser:
 
 ```bash
 uv run manage.py createsuperuser
 ```
 
-### 2.7.2. Adding endpoints for our User models
+Creat one or two more superusers using the same command.
 
-#### 2.7.2.1. Create UserSerializer
+We'll also need some normal users. These can be created directly through the Django shell.
 
-Now that we've got some users to work with, let's add representations of those users to our API. In `tasks/serializers.py` add:
+```bash
+uv run manage.py shell
+```
+
+In the shell, create a few normal users:
 
 ```py
 from django.contrib.auth.models import User
 
+User.objects.create_user(
+    username="alice",
+    password="testpass123",
+)
+
+User.objects.create_user(
+    username="bob",
+    password="testpass123",
+)
+```
+
+> [!TIP]
+> We used `create_user()` instead of `create()` so that Django hashes the passwords before storing them in the database.
+
+You can verify that the users were created:
+
+```py
+User.objects.values("username", "is_superuser")
+```
+
+You should see something similar to:
+
+```
+<QuerySet [
+    {'username': 'admin', 'is_superuser': True},
+    {'username': 'alice', 'is_superuser': False},
+    {'username': 'bob', 'is_superuser': False},
+]>
+```
+
+We'll use the superuser to test administrator access, and the normal users to test ownership restrictions.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.3. Adding endpoints for our User models
+
+We want to expose user-related endpoints with different purposes:
+
+- `POST /users/register/` — create a new account.
+- `GET /users/me/` — retrieve the currently authenticated user's profile.
+- `PUT/PATCH /users/me/` — update the currently authenticated user's profile.
+- `GET /users/` — list users, available only to superusers.
+- `GET /users/<id>/` — retrieve a user, available only to superusers.
+- `PUT/PATCH /users/<id>/` — update a user, available only to superusers.
+
+Notice that registration is deliberately separate from `/users/`. `/users/register/` represents the action of creating a new account, while `/users/` represents administrative access to existing users.
+
+#### 2.7.3.1. Create UserSerializer
+
+Now that we've got some users to work with, let's add representations of those users to our API.
+
+We'll use one serializer for registration and another for reading and updating user profiles.
+
+First, Create `UserRegistrationSerializer` in `tasks/serializers.py`:
+
+```py
+from django.contrib.auth.models import User
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ["username", "password"]
+
+    def create(self, validated_data):
+        return User.objects.create_user(**validated_data)
+```
+
+The password is marked as `write_only` so it can be submitted when creating an account but is never included in API responses.
+
+We use `create_user()` rather than `create()` so that Django automatically hashes the password before storing it.
+
+Now create the serializer used for existing users:
+
+```py
 class UserSerializer(serializers.ModelSerializer):
-    tasks = serializers.PrimaryKeyRelatedField(many=True, queryset=Task.objects.all())
+    tasks = serializers.PrimaryKeyRelatedField(many=True, read_only=True,)
 
     class Meta:
         model = User
@@ -785,51 +882,185 @@ class UserSerializer(serializers.ModelSerializer):
 
 Because `tasks` is a reverse relationship on the `User` model, it will not be included by default when using the `ModelSerializer` class, so we needed to add an explicit field for it.
 
+The `tasks` field is read-only. Clients should never be allowed to assign tasks to a user through the user API. Task ownership is determined when a task is created.
+
 > [!NOTE]
 > Here, `tasks` exists only in the serialized representation (e.g., JSON). It does not modify the database or the `User` model.
 
-#### 2.7.2.2. User views
+[⬆️ Return to Table of contents](#table-of-contents)
 
-We'd just use read-only views for the user representations, so we'll use the `ListAPIView` and `RetrieveAPIView` generic class-based views.
+#### 2.7.3.2. User views
 
-`tasks/views.py`
+Now we'll create views for registration, the current user's profile, and administrative user management.
+
+Edit `tasks/views.py`
 
 ```py
 from django.contrib.auth.models import User
-from tasks.serializers import UserSerializer
 
-class UserList(generics.ListAPIView):
+from .serializers import UserRegistrationSerializer, UserSerializer
+
+class UserRegistration(generics.CreateAPIView):
     """
-    List all users (GET).
+    Create a new user account.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+
+
+class UserMe(generics.RetrieveUpdateAPIView):
+    """
+    Retrieve or update the currently authenticated user.
+    """
+
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        """We won't receive a pk in the URL, so we return the currently authenticated user."""
+        return self.request.user
+
+
+class UserList(generics.ListCreateAPIView):
+    """
+    List all users (GET), or create a new user (POST).
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
 
-class UserDetail(generics.RetrieveAPIView):
+class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     """
-    Retrieve (GET) a single user.
+    Retrieve (GET), update (PUT), or delete (DELETE) a single user.
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
 ```
 
-#### 2.7.2.3. Url patterns
+[⬆️ Return to Table of contents](#table-of-contents)
+
+#### 2.7.3.3. Url patterns for user views
 
 Finally we need to add those views into the API, by referencing them from the URLconf. Add the following to the patterns in `tasks/urls.py`.
 
 ```py
+path("users/register/", views.UserRegistration.as_view()),
+path("users/me/", views.UserMe.as_view()),
 path("users/", views.UserList.as_view()),
 path("users/<int:pk>/", views.UserDetail.as_view()),
 ```
 
-Check if the api endpoints show users or user.
+Open the browsable API in the browser and verify that the new endpoints return the expected user representations.
 
-### 2.7.3. Associating tasks with users
+### 2.7.4. Adding required permissions to user views
 
-Right now, if we created a task, there'd be no way of associating the user that created the task, with the task instance. The user isn't sent as part of the serialized representation, but is instead a property of the incoming request.
+We want to make sure that users can only access user endpoints when they are authenticated.
+
+REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use IsAuthenticated, which requires users to be authenticated before they can access the view.
+
+1. First add the following import in the `tasks/views.py` module
+
+   ```py
+   from rest_framework import permissions
+   ```
+
+2. Then, add the permission classes to the `UserMe`, `UserList` and `UserDetail` views.
+
+   ```py
+    class UserMe(generics.RetrieveUpdateAPIView):
+        # authenticated users can read or update their own profile
+        permission_classes = [permissions.IsAuthenticated]
+
+    class UserList(generics.ListCreateAPIView):
+        # authenticated users can read users
+        permission_classes = [permissions.IsAuthenticated]
+
+
+    class UserDetail(generics.RetrieveUpdateDestroyAPIView):
+        permission_classes = [permissions.IsAuthenticated]
+   ```
+
+We don't add a permission class to `UserRegistration` because unauthenticated users must be able to create an account.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.5. Adding login to the Browsable API
+
+At this stage, we'll include the login and logout views for the browsable API to allow users to log in and log out easily.
+
+At the end of our project-level `config/urls.py` file, add a pattern to include the login and logout views for the browsable API.
+
+```py
+urlpatterns += [
+    # include the login and logout views for the browsable API
+    path("api-auth/", include("rest_framework.urls")),
+]
+```
+
+The `'api-auth/'` part of pattern can actually be whatever URL you want to use.
+
+Now, if you open the browser again and refresh the page, you'll see a `'Login'` link in the top right of the page which redirects to the `/api-auth/login/` page.
+
+Log in as one of the users you created earlier. You should now be able to perform the actions allowed by that user's permissions.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.6. Restricting access to users
+
+At the moment, any authenticated user can access the user list and any individual user.
+
+We want these administrative endpoints to be available only to superusers.
+
+To enforce this, we'll create a custom permission class.
+
+In the `tasks` app, create a new file, `permissions.py` with following content:
+
+`tasks/permissions.py`
+
+```py
+from rest_framework import permissions
+
+class IsSuperuser(permissions.BasePermission):
+    """
+    Custom permission that allows only superusers to access a view.
+    """
+
+    def has_permission(self, request, view):
+        return request.user.is_superuser
+```
+
+The `has_permission()` instead of `has_object_permission()` method is used here because we want to restrict access to the entire endpoint, rather than check an individual object.
+
+Now add that custom permission into `tasks/views.py`:
+
+```py
+from tasks.permissions import IsSuperuser
+
+class UserList(generics.ListCreateAPIView):
+    # ...
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
+
+
+class UserDetail(generics.RetrieveUpdateDestroyAPIView):
+    # ...
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
+```
+
+Now:
+
+- Normal authenticated users can access `/users/me/`.
+- Normal authenticated users cannot access `/users/` or `/users/<id>/`.
+- Superusers can access `/users/` and `/users/<id>/`.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.7. Associating tasks with users
+
+Right now, if we created a task, there'd be no way of associating the user that created the task with the task instance.
+
+The user isn't sent as part of the serialized representation.
 
 The way we deal with that is by overriding a `.perform_create()` method on our task views, that allows us to modify how the instance save is managed, and handle any information that is implicit in the incoming request or requested URL.
 
@@ -843,16 +1074,18 @@ def perform_create(self, serializer):
     serializer.save(owner=self.request.user)
 ```
 
-The `create()` method of our serializer will now be passed an additional `'owner'` field, along with the validated data from the request.
+The `create()` method will now save the authenticated user as the task's owner.
 
 > [!NOTE]
-> You might think the `'Task'` model already has `'owner'` field. So why again associating a task with an user?
+> You might think the `Task` model already has an `owner` field. So why do we need to associate the task with a user again?
 >
 > Yes, every task has an `owner` field. But who sets its value?
 >
 > This is why the view saves the authenticated (logged in) user as the `owner`. Here `self.request.user` is the authenticated user.
 
-### 2.7.4. Updating our `TaskSerializer`
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.7.8. Updating our `TaskSerializer`
 
 Now that tasks are associated with the user that created them, let's update our `TaskSerializer` to reflect that.
 
@@ -868,11 +1101,15 @@ The `source` argument controls which attribute is used to populate a field (and 
 
 The field we've added is the untyped `ReadOnlyField` class, in contrast to the other typed fields, such as `CharField`, `BooleanField` etc... The untyped `ReadOnlyField` is always read-only, and will be used for serialized representations, but will not be used for updating model instances when they are deserialized. We could have also used `CharField(read_only=True)` here.
 
-### 2.7.5. Adding required permissions to views
+[⬆️ Return to Table of contents](#table-of-contents)
 
-Now that tasks are associated with users, we want to make sure that only authenticated users are able to create, update and delete tasks.
+### 2.7.9. Adding required permissions to task views
 
-REST framework includes a number of permission classes to restrict who can access a given view. In this case we'll use `IsAuthenticatedOrReadOnly`, which will ensure that authenticated requests get read-write access, and unauthenticated requests get read-only access.
+Now that tasks are associated with users, we want to make sure that tasks and users can only be accessed based on authentication and ownership.
+
+At this stage, we'll require users to be authenticated before accessing the task and user endpoints. We will add ownership restrictions in later sections.
+
+REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated`, which requires users to be authenticated before they can access the view.
 
 1. First add the following import in the `tasks/views.py` module
 
@@ -880,60 +1117,37 @@ REST framework includes a number of permission classes to restrict who can acces
    from rest_framework import permissions
    ```
 
-2. Then, add the following property to both the `TasktList` and `TasktDetail` view classes.
+2. Then, add the following property to the `TaskList`, `TaskDetail`, `UserList` and `UserDetail` view classes.
 
    ```py
-   permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+   permission_classes = [permissions.IsAuthenticated]
    ```
 
-### 2.7.6. Adding login to the Browsable API
+This ensures that anonymous users cannot access any of these endpoints.
 
-If you open a browser and navigate to the browsable API at the moment, you'll find that you're no longer able to create new tasks. In order to do so we'd need to be able to login as a user.
+### 2.7.10. Object level permissions to tasks
 
-At the end of our project-level `config/urls.py` file, add a pattern to include the login and logout views for the browsable API.
+At the moment, any authenticated user can access tasks, including tasks created by other users.
 
-```py
-urlpatterns += [
-    # include the login and logout views for the browsable API
-    path("api-auth/", include("rest_framework.urls")),
-]
-```
+We want to make our API creator-related:
 
-The `'api-auth/'` part of pattern can actually be whatever URL you want to use.
+- A normal authenticated user can read, update and delete only their own tasks.
+- A superuser can read, update and delete all tasks.
+- Users must be authenticated to access the tasks and users.
 
-Now if you open up the browser again and refresh the page you'll see a `'Login'` link in the top right of the page which redirects to `/api-auth/login/` page. If you log in as one of the users you created earlier, you'll be able to create tasks again (as well as update and delete any tasks even that were created by other users, which we'll fix next).
-
-Once you've created a few tasks, navigate to the `'/users/'` endpoint, and notice that the representation includes a list of the task ids that are associated with each user, in each user's `'tasks'` field.
-
-### 2.7.7. Object level permissions
-
-At the moment, any logged in user can update and delete tasks even that were created by other users.
-
-We want to make sure that only the user that created the task is able to update or delete it.
-
-To do that we need to create a custom permission.
-
-In the `tasks` app, create a new file, `permissions.py` with following content:
-
-`tasks/permissions.py`
+To enforce ownership at the object level, we'll create a new custom permission class named `IsOwnerOrAdmin` in the `tasks/permissions.py` module.
 
 ```py
-from rest_framework import permissions
-
-class IsOwnerOrReadOnly(permissions.BasePermission):
+class IsOwnerOrAdmin(permissions.BasePermission):
     """
-    Custom permission to only allow owners of an object to edit it.
+    Custom permission that allows only the owner or a superuser to access an object.
+
     Assumes the model instance has an `owner` attribute.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Read permissions are allowed to any request,
-        # so we'll always allow GET, HEAD or OPTIONS requests.
-        if request.method in permissions.SAFE_METHODS:
-            return True
-
         # Write permissions are only allowed if current user = owner of the requested object.
-        return obj.owner == request.user
+        return request.user.is_superuser or obj.owner == request.user
 ```
 
 Now add that custom permission to our task instance endpoint, by editing the `permission_classes` property on the `TaskDetail` view class:
@@ -941,20 +1155,50 @@ Now add that custom permission to our task instance endpoint, by editing the `pe
 `tasks/views.py/TaskDetail`
 
 ```py
-from tasks.permissions import IsOwnerOrReadOnly
+from tasks.permissions import IsOwnerOrAdmin
 
 class taskDetail(generics.RetrieveUpdateDestroyAPIView):
     #...
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 ```
 
-Now, if you check on a browser again, you find that the `'DELETE'` and `'PUT'` actions only appear on a task instance endpoint if you're logged in as the same user that created the task.
+The `IsAuthenticated` permission ensures that only logged-in users can access the endpoint, while `IsOwnerOrAdmin` ensures that the authenticated user is either the task owner or a superuser.
 
-### 2.7.8. Authenticating requests
+Now, check on a browser again.
+
+### 2.7.11. Restricting Task lists
+
+The `TaskList` view needs an additional restriction. Unlike a detail view, a list view does not perform object-level permission checks on every object in the queryset. Therefore, we need to filter the queryset so that normal users only receive their own tasks.
+
+Update the `TaskList` view as follows:
+
+`tasks/views.py`
+
+```py
+class TaskList(generics.ListCreateAPIView):
+    """
+    List all tasks (GET), or create a new task (POST).
+    """
+
+    serializer_class = TaskSerializer
+    # authenticated users can read or create tasks,
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # associate authenticated user with a new task
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Task.objects.all()
+        return Task.objects.filter(owner=self.request.user)
+```
+
+### 2.7.12. Authenticating requests
 
 When we interact with the API through the web browser, we can login, and the browser session will then provide the required authentication for the requests.
 
-If we're interacting with the API programmatically we need to explicitly provide the authentication credentials on each request.
+When using HTTP Basic Authentication, the client sends the username and password with each request that requires authentication.
 
 If we try to create a task without authenticating, we'll get an error:
 
@@ -982,10 +1226,10 @@ http -a <user>:<password> POST http://127.0.0.1:8000/tasks/ title="Some task"
 }
 ```
 
-We haven't set up any authentication classes, so the defaults are currently applied, which are `SessionAuthentication` and `BasicAuthentication`.
+We haven't set up any custom authentication classes, so DRF's defaults are currently applied, which are `SessionAuthentication` and `BasicAuthentication`.
+So, in a client application, we can use Basic Authorization (providing a username and password) to authenticate while creating, deleting or updating tasks.
 
-> [!NOTE]
-> In a api testing app, like `Postman`, use Basic Authorization to authenticate while creating, deleting or updating tasks.
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ## 2.8. Relationships & Hyperlinked APIs
 
