@@ -28,10 +28,10 @@
     - [2.7.3. Adding endpoints for our User models](#273-adding-endpoints-for-our-user-models)
       - [2.7.3.1. Create UserSerializer](#2731-create-userserializer)
       - [2.7.3.2. User views](#2732-user-views)
-      - [2.7.3.3. Url patterns](#2733-url-patterns)
+      - [2.7.3.3. Url patterns for user views](#2733-url-patterns-for-user-views)
     - [2.7.4. Adding required permissions to user views](#274-adding-required-permissions-to-user-views)
     - [2.7.5. Adding login to the Browsable API](#275-adding-login-to-the-browsable-api)
-    - [2.7.6. Object level permissions to users](#276-object-level-permissions-to-users)
+    - [2.7.6. Restricting access to users](#276-restricting-access-to-users)
     - [2.7.7. Associating tasks with users](#277-associating-tasks-with-users)
     - [2.7.8. Updating our `TaskSerializer`](#278-updating-our-taskserializer)
     - [2.7.9. Adding required permissions to task views](#279-adding-required-permissions-to-task-views)
@@ -749,9 +749,9 @@ class Task(models.Model):
     # ...
 ```
 
-When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but If this is a development project, let's just recreate the database and migrations.
+When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for this development project, let's just recreate the database and migrations.
 
-first drop and recreate the database using the database credentials from the `.env` file:
+First, drop and recreate the database using the database credentials from the `.env` file:
 
 ```bash
 dropdb -U <db_user> <db_name>
@@ -936,7 +936,7 @@ class UserDetail(generics.RetrieveUpdateAPIView):
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
-#### 2.7.3.3. Url patterns
+#### 2.7.3.3. Url patterns for user views
 
 Finally we need to add those views into the API, by referencing them from the URLconf. Add the following to the patterns in `tasks/urls.py`.
 
@@ -951,9 +951,9 @@ Open the browsable API in the browser and verify that the new endpoints return t
 
 ### 2.7.4. Adding required permissions to user views
 
-We want to make sure that users can only be accessed based on authentication.
+We want to make sure that users can only access user endpoints when they are authenticated.
 
-REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use `IsAuthenticated` which requires users to be authenticated before they can access the view.
+REST framework includes a number of permission classes to restrict who can access a given view. For this stage, we'll use IsAuthenticated, which requires users to be authenticated before they can access the view.
 
 1. First add the following import in the `tasks/views.py` module
 
@@ -977,7 +977,7 @@ REST framework includes a number of permission classes to restrict who can acces
         permission_classes = [permissions.IsAuthenticated]
    ```
 
-We didn't add a permission class to the `UserRegistration` view, because we want unauthenticated users to be able to register.
+We don't add a permission class to `UserRegistration` because unauthenticated users must be able to create an account.
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
@@ -996,20 +996,19 @@ urlpatterns += [
 
 The `'api-auth/'` part of pattern can actually be whatever URL you want to use.
 
-Now if you open up the browser again and refresh the page you'll see a `'Login'` link in the top right of the page which redirects to `/api-auth/login/` page. If you log in as one of the users you created earlier, you'll be able to do permitted actions on the API.
+Now, if you open the browser again and refresh the page, you'll see a `'Login'` link in the top right of the page which redirects to the `/api-auth/login/` page.
 
-Try to create some new users using the registration view and login with a normal user.
-Then navigate to the `'/users/me/'` endpoint, the user will only be able to see their own profile. Check that other endpoints also work as expected.
+Log in as one of the users you created earlier. You should now be able to perform the actions allowed by that user's permissions.
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
-### 2.7.6. Object level permissions to users
+### 2.7.6. Restricting access to users
 
-At the moment, any authenticated user can access other users.
+At the moment, any authenticated user can access the user list and any individual user.
 
-We want to make our API creator-related.
+We want these administrative endpoints to be available only to superusers.
 
-To enforce ownership at the object level, we need to create a custom permission.
+To enforce this, we'll create a custom permission class.
 
 In the `tasks` app, create a new file, `permissions.py` with following content:
 
@@ -1020,34 +1019,43 @@ from rest_framework import permissions
 
 class IsSuperuser(permissions.BasePermission):
     """
+    Custom permission that allows only superusers to access a view.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_permission(self, request, view):
         return request.user.is_superuser
 ```
 
-Now add that custom permission, by editing the `permission_classes` property on the `UserList` and `UserDetail` view class.
+The `has_permission()` instead of `has_object_permission()` method is used here because we want to restrict access to the entire endpoint, rather than check an individual object.
 
-`tasks/views.py`
+Now add that custom permission into `tasks/views.py`:
 
 ```py
-from tasks.permissions import IsOwnerOrAdmin
+from tasks.permissions import IsSuperuser
 
 class UserList(generics.ListAPIView):
+    # ...
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 
 
 class UserDetail(generics.RetrieveUpdateAPIView):
+    # ...
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 ```
 
-The `IsAuthenticated` permission ensures that only logged-in users can access the endpoint.
+Now:
 
-Now, check on a browser again.
+- Normal authenticated users can access `/users/me/`.
+- Normal authenticated users cannot access `/users/` or `/users/<id>/`.
+- Superusers can access `/users/` and `/users/<id>/`.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ### 2.7.7. Associating tasks with users
 
-Right now, if we created a task, there'd be no way of associating the user that created the task, with the task instance. The user isn't sent as part of the serialized representation, but is instead a property of the incoming request.
+Right now, if we created a task, there'd be no way of associating the user that created the task with the task instance.
+
+The user isn't sent as part of the serialized representation.
 
 The way we deal with that is by overriding a `.perform_create()` method on our task views, that allows us to modify how the instance save is managed, and handle any information that is implicit in the incoming request or requested URL.
 
@@ -1061,14 +1069,16 @@ def perform_create(self, serializer):
     serializer.save(owner=self.request.user)
 ```
 
-The `create()` method of our serializer will now be passed an additional `'owner'` field, along with the validated data from the request.
+The `create()` method will now save the authenticated user as the task's owner.
 
 > [!NOTE]
-> You might think the `'Task'` model already has `'owner'` field. So why again associating a task with an user?
+> You might think the `Task` model already has an `owner` field. So why do we need to associate the task with a user again?
 >
 > Yes, every task has an `owner` field. But who sets its value?
 >
 > This is why the view saves the authenticated (logged in) user as the `owner`. Here `self.request.user` is the authenticated user.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ### 2.7.8. Updating our `TaskSerializer`
 
@@ -1085,6 +1095,8 @@ Now that tasks are associated with the user that created them, let's update our 
 The `source` argument controls which attribute is used to populate a field (and can point at any attribute on the serialized instance).
 
 The field we've added is the untyped `ReadOnlyField` class, in contrast to the other typed fields, such as `CharField`, `BooleanField` etc... The untyped `ReadOnlyField` is always read-only, and will be used for serialized representations, but will not be used for updating model instances when they are deserialized. We could have also used `CharField(read_only=True)` here.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ### 2.7.9. Adding required permissions to task views
 
@@ -1118,15 +1130,9 @@ We want to make our API creator-related:
 - A superuser can read, update and delete all tasks.
 - Users must be authenticated to access the tasks and users.
 
-To enforce ownership at the object level, we need to create a custom permission.
-
-In the `tasks` app, create a new file, `permissions.py` with following content:
-
-`tasks/permissions.py`
+To enforce ownership at the object level, we'll create a new custom permission class named `IsOwnerOrAdmin` in the `tasks/permissions.py` module.
 
 ```py
-from rest_framework import permissions
-
 class IsOwnerOrAdmin(permissions.BasePermission):
     """
     Custom permission that allows only the owner or a superuser to access an object.
