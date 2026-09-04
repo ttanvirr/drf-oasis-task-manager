@@ -9,6 +9,8 @@ router.register(r"tasks", views.TaskViewSet, basename="task")
 router.register(r"users", views.UserViewSet, basename="user")
 
 # The API URLs are now determined automatically by the router.
+# Order matters, put `users/register/` before generated `users/<pk>/` to avoid conflicts.
 urlpatterns = [
+    path("users/register/", views.UserRegistration.as_view(), name="user-registration"),
     path("", include(router.urls)),
 ]
