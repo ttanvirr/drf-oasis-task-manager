@@ -916,18 +916,18 @@ class UserMe(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
-class UserList(generics.ListAPIView):
+class UserList(generics.ListCreateAPIView):
     """
-    List all users (GET).
+    List all users (GET), or create a new user (POST).
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
 
-class UserDetail(generics.RetrieveUpdateAPIView):
+class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     """
-    Retrieve (GET) or update (PUT) a single user.
+    Retrieve (GET), update (PUT), or delete (DELETE) a single user.
     """
 
     queryset = User.objects.all()
@@ -968,12 +968,12 @@ REST framework includes a number of permission classes to restrict who can acces
         # authenticated users can read or update their own profile
         permission_classes = [permissions.IsAuthenticated]
 
-    class UserList(generics.ListAPIView):
+    class UserList(generics.ListCreateAPIView):
         # authenticated users can read users
         permission_classes = [permissions.IsAuthenticated]
 
 
-    class UserDetail(generics.RetrieveUpdateAPIView):
+    class UserDetail(generics.RetrieveUpdateDestroyAPIView):
         permission_classes = [permissions.IsAuthenticated]
    ```
 
@@ -1033,12 +1033,12 @@ Now add that custom permission into `tasks/views.py`:
 ```py
 from tasks.permissions import IsSuperuser
 
-class UserList(generics.ListAPIView):
+class UserList(generics.ListCreateAPIView):
     # ...
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 
 
-class UserDetail(generics.RetrieveUpdateAPIView):
+class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     # ...
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 ```

@@ -71,9 +71,9 @@ class UserList(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 
 
-class UserDetail(generics.RetrieveUpdateAPIView):
+class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     """
-    Retrieve (GET) or update (PUT) a single user.
+    Retrieve (GET), update (PUT), or delete (DELETE) a single user.
     """
 
     queryset = User.objects.all()
