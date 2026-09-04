@@ -37,7 +37,7 @@
     - [2.7.9. Adding required permissions to task views](#279-adding-required-permissions-to-task-views)
     - [2.7.10. Object level permissions to tasks](#2710-object-level-permissions-to-tasks)
     - [2.7.11. Restricting Task lists](#2711-restricting-task-lists)
-    - [2.7.13. Authenticating requests](#2713-authenticating-requests)
+    - [2.7.12. Authenticating requests](#2712-authenticating-requests)
 
 # 1. Oasis task manager
 
@@ -731,8 +731,6 @@ Currently, our API does not have any restrictions on who can access or modify ta
 - Only the creator of a task may update or delete it.
 - Unauthenticated users may still read tasks.
 
-We will first work on restricting tasks and then users.
-
 We will use Django's built-in User model and DRF's built-in token authentication.
 
 ### 2.7.1. Adding owner field to our model
@@ -751,15 +749,16 @@ class Task(models.Model):
     # ...
 ```
 
-When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but for our convenience, let's just delete the existing database and migrations and then recreate the database using following command and start again.
+When that's all done we'll need to update our database tables. Normally we'd create a database migration in order to do that, but If this is a development project, let's just recreate the database and migrations.
+
+first drop and recreate the database using the database credentials from the `.env` file:
 
 ```bash
+dropdb -U <db_user> <db_name>
 createdb -U <db_user> <db_name>
 ```
 
-the `<db_user>` and `<db_name>` should match the ones set in the `.env` file
-
-Then:
+Then recreate the migrations and database tables:
 
 ```bash
 rm -r tasks/migrations
@@ -837,9 +836,7 @@ We want to expose user-related endpoints with different purposes:
 - `GET /users/<id>/` — retrieve a user, available only to superusers.
 - `PUT/PATCH /users/<id>/` — update a user, available only to superusers.
 
-Notice that registration is deliberately separate from `/users/`.
-
-`/users/register/` represents the action of creating a new account, while `/users/` represents administrative access to existing users.
+Notice that registration is deliberately separate from `/users/`. `/users/register/` represents the action of creating a new account, while `/users/` represents administrative access to existing users.
 
 #### 2.7.3.1. Create UserSerializer
 
@@ -1186,7 +1183,7 @@ class TaskList(generics.ListCreateAPIView):
         return Task.objects.filter(owner=self.request.user)
 ```
 
-### 2.7.13. Authenticating requests
+### 2.7.12. Authenticating requests
 
 When we interact with the API through the web browser, we can login, and the browser session will then provide the required authentication for the requests.
 
