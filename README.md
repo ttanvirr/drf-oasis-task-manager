@@ -1454,7 +1454,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
 ```
 
-Here we've used the `ModelViewSet` class to automatically provide the operations. We're still setting the `queryset` and `serializer_class` attributes, but we no longer need to provide the same information to two separate classes.
+Here we've used the `ModelViewSet` class to automatically provide the `list`, `create`, `retrieve`, `update` and `destroy` operations. We're still setting the `queryset` and `serializer_class` attributes, but we no longer need to provide the same information to two separate classes.
 
 Next we're going to replace the `TaskList` and `TaskDetail` view classes with a single `TaskViewSet` class.
 
@@ -1464,15 +1464,13 @@ from rest_framework import permissions, viewsets
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
-    This ViewSet automatically provides `list`, `create`, `retrieve`,
-    `update` and `destroy` actions.
+    This ViewSet automatically provides `list`, `create`, `retrieve`, `update`, `partial_update` and `destroy` actions.
     """
 
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     # authenticated users can create new tasks,
     # creator of a task can update or delete it
-    # any user has read access
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
     def perform_create(self, serializer):
@@ -1498,7 +1496,7 @@ task_list = views.TaskViewSet.as_view({"get": "list", "post": "create"})
 task_detail = views.TaskViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
 )
-user_me = views.UserViewSet.as_view({"get": "me", "put": "update", "patch": "partial_update"})
+user_me = views.UserViewSet.as_view({"get": "me", "put": "me", "patch": "me"})
 user_list = views.UserViewSet.as_view({"get": "list"})
 user_detail = views.UserViewSet.as_view({"get": "retrieve"})
 ```
