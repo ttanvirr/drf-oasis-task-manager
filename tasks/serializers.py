@@ -21,8 +21,19 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
 
 
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ["username", "password"]
+
+    def create(self, validated_data):
+        return User.objects.create_user(**validated_data)
+
+
 class UserSerializer(serializers.ModelSerializer):
-    tasks = serializers.PrimaryKeyRelatedField(many=True, queryset=Task.objects.all())
+    tasks = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = User

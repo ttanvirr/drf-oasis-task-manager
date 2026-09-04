@@ -4,7 +4,7 @@ from rest_framework import generics, permissions
 from tasks.permissions import IsOwnerOrAdmin
 
 from .models import Task
-from .serializers import TaskSerializer, UserSerializer
+from .serializers import TaskSerializer, UserRegistrationSerializer, UserSerializer
 
 
 class TaskList(generics.ListCreateAPIView):
@@ -37,6 +37,31 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
 
+class UserRegistration(generics.CreateAPIView):
+    """
+    Create a new user account.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    # Allow anyone to register
+    permission_classes = [permissions.AllowAny]
+
+
+class UserMe(generics.RetrieveUpdateAPIView):
+    """
+    Retrieve or update the currently authenticated user.
+    """
+
+    serializer_class = UserSerializer
+    # authenticated users can read or update their own profile
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        """We won't receive a pk in the URL, so we return the currently authenticated user."""
+        return self.request.user
+
+
 class UserList(generics.ListAPIView):
     """
     List all users (GET).
@@ -44,16 +69,15 @@ class UserList(generics.ListAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    # Authenticated users can access users (read).
+    # authenticated users can read users
     permission_classes = [permissions.IsAuthenticated]
 
 
-class UserDetail(generics.RetrieveAPIView):
+class UserDetail(generics.RetrieveUpdateAPIView):
     """
-    Retrieve (GET) a single user.
+    Retrieve (GET) or update (PUT) a single user.
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    # Authenticated users can access his profile (read).
     permission_classes = [permissions.IsAuthenticated]
