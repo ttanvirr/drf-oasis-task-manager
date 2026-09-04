@@ -1251,7 +1251,7 @@ Dealing with relationships between entities is one of the more challenging aspec
 
 REST framework supports all of these styles.
 
-In this case we'd like to use a hyperlinked style between entities. In order to do so, we'll modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.
+In this case we'd like to use a hyperlinked style between entities. In order to do so, we'll modify some of our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.
 
 The `HyperlinkedModelSerializer` has the following differences from `ModelSerializer`:
 
@@ -1276,6 +1276,8 @@ urlpatterns = format_suffix_patterns(
     [
         path("tasks/", views.TaskList.as_view(), name="task-list"),
         path("tasks/<int:pk>/", views.TaskDetail.as_view(), name="task-detail"),
+        path("users/register/", views.UserRegistration.as_view(), name="user-register"),
+        path("users/me/", views.UserMe.as_view(), name="user-me"),
         path("users/", views.UserList.as_view(), name="user-list"),
         path("users/<int:pk>/", views.UserDetail.as_view(), name="user-detail"),
     ]
@@ -1284,7 +1286,7 @@ urlpatterns = format_suffix_patterns(
 
 ### 2.8.2. Update serializers
 
-Modify our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.:
+Modify some of our serializers to extend `HyperlinkedModelSerializer` instead of the existing `ModelSerializer`.:
 
 `tasks/serializers.py`
 
@@ -1317,6 +1319,8 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         model = User
         fields = ["url", "id", "username", "tasks"]
 ```
+
+> Keep the `UserRegistrationSerializer` the same as before.
 
 - The `url` field in the `UserSerializer` automatically points to `user-detail` url pattern.
 - The `tasks` field in the `UserSerializer` points to `task-detail` url pattern for each task which is set by `view_name="task-detail"`
@@ -1385,6 +1389,8 @@ REST_FRAMEWORK = {
 ```
 
 We could also customize the pagination style if we needed to, but in this case we'll just stick with the default.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ## 2.9. ViewSets & Routers
 
