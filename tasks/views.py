@@ -1,13 +1,12 @@
 from django.contrib.auth.models import User
-from rest_framework import permissions, viewsets
-from rest_framework.reverse import reverse
-from rest_framework.decorators import api_view
+from rest_framework import generics, permissions, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from tasks.permissions import IsOwnerOrReadOnly
+from tasks.permissions import IsOwnerOrAdmin, IsSuperuser
 
 from .models import Task
-from .serializers import TaskSerializer, UserSerializer
+from .serializers import TaskSerializer, UserRegistrationSerializer, UserSerializer
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -20,29 +19,59 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     # authenticated users can create new tasks,
     # creator of a task can update or delete it
-    # any user has read access
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
     def perform_create(self, serializer):
         # associate authenticated user with a new task
         serializer.save(owner=self.request.user)
 
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Task.objects.all()
+        return Task.objects.filter(owner=self.request.user)
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+
+class UserRegistration(generics.CreateAPIView):
     """
-    This viewset automatically provides `list` and `retrieve` actions.
+    Create a new user account.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for user management.
     """
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
+    def get_permissions(self):
+        if self.action == "me":
+            return [permissions.IsAuthenticated()]
+        return [
+            permissions.IsAuthenticated(),
+            IsSuperuser(),
+        ]
 
-@api_view(["GET"])
-def api_root(request, format=None):
-    # return a json response of a list of available endpoints
-    return Response(
-        {
-            "users": reverse("user-list", request=request, format=format),
-            "tasks": reverse("task-list", request=request, format=format),
-        }
-    )
+    @action(detail=False, methods=["get", "put", "patch"])
+    def me(self, request):
+        """
+        Retrieve or update the currently authenticated user.
+        """
+
+        if request.method == "GET":
+            serializer = self.get_serializer(request.user)
+            return Response(serializer.data)
+
+        serializer = self.get_serializer(
+            request.user,
+            data=request.data,
+            partial=request.method == "PATCH",
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
