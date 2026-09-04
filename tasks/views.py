@@ -131,7 +131,6 @@ from .serializers import TaskSerializer, UserRegistrationSerializer, UserSeriali
         description="Delete a task. Only the task owner can delete it.",
         responses={
             204: OpenApiResponse(
-                response=TaskSerializer,
                 description="The task was successfully deleted.",
             ),
             403: OpenApiResponse(
@@ -165,6 +164,20 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Task.objects.filter(owner=self.request.user)
 
 
+@extend_schema_view(
+    summary="Register a new user",
+    description="Create a new user account.",
+    request=UserRegistrationSerializer,
+    responses={
+        201: OpenApiResponse(
+            response=UserSerializer,
+            description="The user account was successfully created.",
+        ),
+        400: OpenApiResponse(
+            description="The request data was invalid.",
+        ),
+    },
+)
 class UserRegistration(generics.CreateAPIView):
     """
     Create a new user account.
@@ -199,6 +212,61 @@ class UserRegistration(generics.CreateAPIView):
             ),
         },
     ),
+    update=extend_schema(
+        summary="Update a user",
+        description="Update a user. Only a superuser can update a user.",
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=UserSerializer,
+                description="The user was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data is invalid.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not a superuser.",
+            ),
+            404: OpenApiResponse(
+                description="The requested user does not exist.",
+            ),
+        },
+    ),
+    partial_update=extend_schema(
+        summary="Partially update a user",
+        description="Partially update a user. Only a superuser can update a user.",
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=UserSerializer,
+                description="The user was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data is invalid.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not a superuser.",
+            ),
+            404: OpenApiResponse(
+                description="The requested user does not exist.",
+            ),
+        },
+    ),
+    destroy=extend_schema(
+        summary="Delete a user",
+        description="Delete a user. Only a superuser can delete a user.",
+        responses={
+            204: OpenApiResponse(
+                description="The user was successfully deleted.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not a superuser.",
+            ),
+            404: OpenApiResponse(
+                description="The requested user does not exist.",
+            ),
+        },
+    ),
 )
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -216,6 +284,20 @@ class UserViewSet(viewsets.ModelViewSet):
             IsSuperuser(),
         ]
 
+    @extend_schema(
+        summary="Retrieve or update the current user",
+        description="Retrieve or update the currently authenticated user's profile.",
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=UserSerializer,
+                description="The current user's profile.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid.",
+            ),
+        },
+    )
     @action(detail=False, methods=["get", "put", "patch"])
     def me(self, request):
         """
