@@ -1640,6 +1640,8 @@ REST_FRAMEWORK = {
 
 `AutoSchema` is the mechanism that allows `drf-spectacular` to inspect your DRF views and serializers and turn that information into an OpenAPI schema.
 
+[⬆️ Return to Table of contents](#table-of-contents)
+
 ### 2.10.2. Add the OpenAPI schema endpoint
 
 Now we need an endpoint that actually serves the OpenAPI schema.
@@ -1692,6 +1694,8 @@ paths:
 
 That's OpenAPI schema.
 
+[⬆️ Return to Table of contents](#table-of-contents)
+
 ### 2.10.3. Add Swagger UI
 
 Swagger UI reads that OpenAPI schema and creates the nice interactive documentation page.
@@ -1741,6 +1745,8 @@ GET /users/{id}/
 ```
 
 Your router is already defining those endpoints through `TaskViewSet` and `UserViewSet`.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ### 2.10.4. Give the API some proper identity
 
@@ -1795,6 +1801,8 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
     # ...
 ```
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 #### 2.10.5.2. Customize the `TaskViewSet` documentation
 
@@ -1937,6 +1945,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 Now reload Swagger UI and notice the changes in action.
 
+[⬆️ Return to Table of contents](#table-of-contents)
+
 #### 2.10.5.3. Customize the `UserRegistration` documentation
 
 Because `UserRegistration` is a generic api view, we need to add the `@extend_schema` decorator instead of `@extend_schema_view` to it:
@@ -2068,6 +2078,8 @@ urlpatterns = [
 Now visit: http://localhost:8000/api/redoc/ to see the final presentation layer.
 
 That's all about documenting our API.
+
+[⬆️ Return to Table of contents](#table-of-contents)
 
 ## 2.11. Next steps
 
