@@ -56,7 +56,8 @@
     - [2.10.5. Document the actual API properly](#2105-document-the-actual-api-properly)
       - [2.10.5.1. Edit the ViewSet docstrings](#21051-edit-the-viewset-docstrings)
       - [2.10.5.2. Customize the `TaskViewSet` documentation](#21052-customize-the-taskviewset-documentation)
-      - [2.10.5.3. Customize the `UserViewSet` documentation](#21053-customize-the-userviewset-documentation)
+      - [2.10.5.3. Customize the `UserRegistration` documentation](#21053-customize-the-userregistration-documentation)
+      - [2.10.5.4. Customize the `UserViewSet` documentation](#21054-customize-the-userviewset-documentation)
     - [2.10.6. ReDoc](#2106-redoc)
   - [2.11. Next steps](#211-next-steps)
 
@@ -1936,7 +1937,32 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 Now reload Swagger UI and notice the changes in action.
 
-#### 2.10.5.3. Customize the `UserViewSet` documentation
+#### 2.10.5.3. Customize the `UserRegistration` documentation
+
+Because `UserRegistration` is a generic api view, we need to add the `@extend_schema` decorator instead of `@extend_schema_view` to it:
+
+`views/tasks.py`
+
+```py
+@extend_schema(
+    summary="Register a new user",
+    description="Create a new user account.",
+    request=UserRegistrationSerializer,
+    responses={
+        201: OpenApiResponse(
+            response=UserRegistrationSerializer,
+            description="The user account was successfully created.",
+        ),
+        400: OpenApiResponse(
+            description="The request data was invalid.",
+        ),
+    },
+)
+class UserRegistration(generics.CreateAPIView):
+    # ...
+```
+
+#### 2.10.5.4. Customize the `UserViewSet` documentation
 
 Add a `@extend_schema_view` decorator to `UserViewSet`:
 
@@ -1951,6 +1977,23 @@ Add a `@extend_schema_view` decorator to `UserViewSet`:
             200: OpenApiResponse(
                 response=UserSerializer,
                 description="A paginated list of users.",
+            ),
+        },
+    ),
+    create=extend_schema(
+        summary="Create a user",
+        description="Create a new user. Only a superuser can create a user.",
+        request=UserSerializer,
+        responses={
+            201: OpenApiResponse(
+                response=UserSerializer,
+                description="The user was successfully created.",
+            ),
+            400: OpenApiResponse(
+                description="The request data is invalid.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not a superuser.",
             ),
         },
     ),
@@ -1970,6 +2013,33 @@ Add a `@extend_schema_view` decorator to `UserViewSet`:
 )
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     # ...
+```
+
+We can also use `extend_schema` to customize the `me` endpoint:
+
+`views/tasks.py`
+
+```py
+class UserViewSet(viewsets.ModelViewSet):
+    # ...
+    # Add the decorator before the `me` method
+    @extend_schema(
+        summary="Retrieve or update the current user",
+        description="Retrieve or update the currently authenticated user's profile.",
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=UserSerializer,
+                description="The current user's profile.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid.",
+            ),
+        },
+    )
+    @action(detail=False, methods=["get", "put", "patch"])
+    def me(self, request):
+        # ...
 ```
 
 Again, reload Swagger UI and notice the changes in action.
