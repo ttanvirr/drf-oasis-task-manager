@@ -59,7 +59,9 @@
       - [2.10.5.3. Customize the `UserRegistration` documentation](#21053-customize-the-userregistration-documentation)
       - [2.10.5.4. Customize the `UserViewSet` documentation](#21054-customize-the-userviewset-documentation)
     - [2.10.6. ReDoc](#2106-redoc)
-  - [2.11. Next steps](#211-next-steps)
+  - [2.11. Containerizing our API with Docker (Optional)](#211-containerizing-our-api-with-docker-optional)
+    - [Prerequisites](#prerequisites)
+    - [Start with a simple Dockerfile](#start-with-a-simple-dockerfile)
 
 # 1. Oasis task manager
 
@@ -2081,6 +2083,100 @@ That's all about documenting our API.
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
-## 2.11. Next steps
+## 2.11. Containerizing our API with Docker (Optional)
 
-- Dockerize your API
+At this stage, let's run our Oasis Task Manager api and PostgreSQL with Docker. It follows a two-stage approach:
+
+- _Development:_ Django’s development server plus Docker Compose Watch, which syncs code changes into the container.
+
+- _Production:_ Gunicorn running on a smaller Docker Hardened Image (DHI).
+
+### Prerequisites
+
+- Install `Docker Desktop`, start it, and verify the installation:
+
+```bash
+docker --version
+docker compose version
+```
+
+This project already uses:
+
+- `uv` for dependency management
+- Django REST Framework
+- PostgreSQL with `psycopg`
+- `django-environ` and `DATABASE_URL`
+
+Let's add `Gunicorn` for the production server:
+
+```bash
+uv add gunicorn
+```
+
+### Start with a simple Dockerfile
+
+We'll first create a simple one-stage image from a base python imgae from `Docker Hardened Images` registry.
+
+1. Open/run docker desktop
+
+2. Sign in to the `DHI` registry to use Docker Hardened Images (default registry is `Docker hub`):
+
+   ```bash
+   docker login dhi.io
+   ```
+
+3. Create a `.dockerignore` file to exclude local artifacts from the build context:
+
+   `.dockerignore`
+
+   ```
+   .venv/
+    __pycache__/
+    *.py[cod]
+    .git/
+    .env
+    db.sqlite3
+    staticfiles/
+    media/
+   ```
+
+4. Create a `Dockerfile` in the project root with the following content:
+
+```dockerfile
+# Build my image from a base python image from DHI registry
+# `-dev` image includes tools needed to install packages.
+FROM dhi.io/python:3.14-alpine3.24-dev
+
+# Prevent Python from writing `.pyc` files to disk.
+ENV PYTHONDONTWRITEBYTECODE=1
+# Prevent Python from buffering stdout/stderr so logs appear immediately.
+ENV PYTHONUNBUFFERED=1
+
+# Install uv using python image's pip;
+# `--quiet` (optional) reduces pip's output;
+# `--root-user-action=ignore` (optional) prevents pip from warning about the root user
+RUN pip install --quiet --root-user-action=ignore uv
+
+# Set `/app` as the working directory inside the container
+WORKDIR /app
+
+# Copy the dependencies files to the working directory
+COPY pyproject.toml uv.lock ./
+
+# `uv sync` creates `.venv` and installs the dependencies in it.
+# `--frozen` tells uv to use the existing `uv.lock` file;
+# `--no-install-project` tells uv not to install the project
+RUN uv sync --frozen --no-install-project
+
+# Copy the contents into container at `/app`
+COPY . .
+
+# Tell python to use `.venv`
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Expose port 8000: just a metadata (optional)
+EXPOSE 8000
+
+# Base command to run when the container starts
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+```
