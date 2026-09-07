@@ -1,6 +1,10 @@
+# syntax=docker/dockerfile:1
+
+###### BUILD STAGE ######
+
 # Build my image from a base python image from DHI registry
 # `-dev` image includes tools needed to install packages.
-FROM dhi.io/python:3.14-alpine3.24-dev
+FROM dhi.io/python:3.14-alpine3.24-dev AS builder
 
 # Prevent Python from writing `.pyc` files to disk.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -12,25 +16,47 @@ ENV PYTHONUNBUFFERED=1
 # `--root-user-action=ignore` (optional) prevents pip from warning about the root user
 RUN pip install --quiet --root-user-action=ignore uv
 
+# Use copy mode since the cache and build filesystem are on different volumes.
+ENV UV_LINK_MODE=copy
+
 # Set `/app` as the working directory inside the container
 WORKDIR /app
 
-# Copy the dependencies files to the working directory
-COPY pyproject.toml uv.lock ./
-
+# Install dependencies into a `.venv` using `cache` and `bind` mounts
+# so neither uv not the lock files need to be copied into the image.
 # `uv sync` creates `.venv` and installs the dependencies in it.
 # `--frozen` tells uv to use the existing `uv.lock` file;
 # `--no-install-project` tells uv not to install the project
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project
+
+
+###### RUNTIME STAGE ######
+
+# # Use minimal DHI image with no shell or package manager
+# already runs as the nonroot user.
+FROM dhi.io/python:3.14-alpine3.24
+
+# Prevent Python from writing `.pyc` files to disk.
+ENV PYTHONDONTWRITEBYTECODE=1
+# Prevent Python from buffering stdout/stderr so logs appear immediately.
+ENV PYTHONUNBUFFERED=1
+# Make executables from the copied virtual environment available on PATH.
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Set `/app` as the working directory inside the container
+WORKDIR /app
+
+# Copy the pre-built virtual environment and application source code.
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy the contents into container at `/app`
 COPY . .
-
-# Tell python to use `.venv`
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port 8000: just a metadata (optional)
 EXPOSE 8000
 
 # Base command to run when the container starts
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
