@@ -6,3 +6,5 @@ __pycache__/
 db.sqlite3
 staticfiles/
 media/
+_secrets.txt
+_scripts.py

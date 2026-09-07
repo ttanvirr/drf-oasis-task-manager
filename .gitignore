@@ -21,3 +21,4 @@ staticfiles/
 
 # Others
 _secrets.txt
+_scripts.py
