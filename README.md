@@ -60,8 +60,16 @@
       - [2.10.5.4. Customize the `UserViewSet` documentation](#21054-customize-the-userviewset-documentation)
     - [2.10.6. ReDoc](#2106-redoc)
   - [2.11. Containerizing our API with Docker (Optional)](#211-containerizing-our-api-with-docker-optional)
-    - [Prerequisites](#prerequisites)
-    - [Start with a simple Dockerfile](#start-with-a-simple-dockerfile)
+    - [2.11.1. Prerequisites](#2111-prerequisites)
+    - [2.11.2. Start with a simple Dockerfile](#2112-start-with-a-simple-dockerfile)
+    - [2.11.3. Update the `.env` file](#2113-update-the-env-file)
+    - [2.11.4. Create a simple docker compose](#2114-create-a-simple-docker-compose)
+    - [2.11.5. Build image and run the containers](#2115-build-image-and-run-the-containers)
+    - [2.11.6. Test postgreSQL](#2116-test-postgresql)
+    - [2.11.7. Run migrations and create a superuser](#2117-run-migrations-and-create-a-superuser)
+    - [2.11.8. Persist data through volumes](#2118-persist-data-through-volumes)
+    - [2.11.9. Improve Dockerfile using mounts to `uv sync`](#2119-improve-dockerfile-using-mounts-to-uv-sync)
+  - [2.12. Create multi-stage Dockerfile](#212-create-multi-stage-dockerfile)
 
 # 1. Oasis task manager
 
@@ -2091,14 +2099,14 @@ At this stage, let's run our Oasis Task Manager api and PostgreSQL with Docker. 
 
 - _Production:_ Gunicorn running on a smaller Docker Hardened Image (DHI).
 
-### Prerequisites
+### 2.11.1. Prerequisites
 
 - Install `Docker Desktop`, start it, and verify the installation:
 
-```bash
-docker --version
-docker compose version
-```
+  ```bash
+  docker --version
+  docker compose version
+  ```
 
 This project already uses:
 
@@ -2107,13 +2115,7 @@ This project already uses:
 - PostgreSQL with `psycopg`
 - `django-environ` and `DATABASE_URL`
 
-Let's add `Gunicorn` for the production server:
-
-```bash
-uv add gunicorn
-```
-
-### Start with a simple Dockerfile
+### 2.11.2. Start with a simple Dockerfile
 
 We'll first create a simple one-stage image from a base python imgae from `Docker Hardened Images` registry.
 
@@ -2142,10 +2144,288 @@ We'll first create a simple one-stage image from a base python imgae from `Docke
 
 4. Create a `Dockerfile` in the project root with the following content:
 
+   ```dockerfile
+   # Build my image from a base python image from DHI registry
+   # `-dev` image includes tools needed to install packages.
+   FROM dhi.io/python:3.14-alpine3.24-dev
+
+   # Prevent Python from writing `.pyc` files to disk.
+   ENV PYTHONDONTWRITEBYTECODE=1
+   # Prevent Python from buffering stdout/stderr so logs appear immediately.
+   ENV PYTHONUNBUFFERED=1
+
+   # Install uv using python image's pip;
+   # `--quiet` (optional) reduces pip's output;
+   # `--root-user-action=ignore` (optional) prevents pip from warning about the root user
+   RUN pip install --quiet --root-user-action=ignore uv
+
+   # Set `/app` as the working directory inside the container
+   WORKDIR /app
+
+   # Copy the dependencies files to the working directory
+   COPY pyproject.toml uv.lock ./
+
+   # `uv sync` creates `.venv` and installs the dependencies in it.
+   # `--frozen` tells uv to use the existing `uv.lock` file;
+   # `--no-install-project` tells uv not to install the project
+   RUN uv sync --frozen --no-install-project
+
+   # Copy the contents into container at `/app`
+   COPY . .
+
+   # Tell python to use `.venv`
+   ENV PATH="/app/.venv/bin:$PATH"
+
+   # Expose port 8000: just a metadata (optional)
+   EXPOSE 8000
+
+   # Base command to run when the container starts
+   # Base command to run when the container starts
+   CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+   ```
+
+5. Now build the image named `oasis-task-manager` by running the following command in the project root directory:
+
+   ```bash
+   docker build -t oasis-task-manager .
+   ```
+
+Don't run the container yet. We'll also need to run our PostgreSQL database container. We'll use `docker compose` to run the containers.
+
+### 2.11.3. Update the `.env` file
+
+Add the following environment variables to the `.env` file for our database:
+
+```
+POSTGRES_DB=<db_name>
+POSTGRES_USER=<db_user>
+POSTGRES_PASSWORD=<db_password>
+```
+
+We alread have `<db_host>` and `<db_port>` in `DATABASE_URL` in `.env` file.
+
+Replace `<db_name>`, `<db_user>` and `<db_password>` with appropriate values. We'll pass these values to the containers through Docker Compose.
+
+> [!IMPORTANT]
+> The `<db_host>` must match the service name of the PostgreSQL container defined in `compose.yaml`. So, update the `<db_host>` to `db` in the `.env` file.
+
+### 2.11.4. Create a simple docker compose
+
+Create a `compose.yaml` file in project root directory with the following content to start the drf app and db containers:
+
+```yaml
+services:
+  web:
+    # Build the image using Dockerfile in the current directory
+    build: .
+    # (optional) name the image
+    image: oasis-task-manager
+    env_file:
+      - .env
+    ports:
+      # equivalent to `docker run -p 8000:8000`
+      - "8000:8000"
+    # Wait for the database to pass its healthcheck and
+    # start the `db` service before starting the `web` service.
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    # Run PostgreSQL container using an image
+    image: dhi.io/postgres:18
+    # Automatically restart the db container if it stops.
+    restart: always
+    # Left-side names are not arbitrary; Right-side name are defined in `.env`
+    # These are PostgreSQL image environment variables.
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    # Expose the port only to other services on the Compose network,
+    # not to the host machine.
+    expose:
+      - 5432
+    # Only report healthy once PostgreSQL is ready to accept connections,
+    # so the web service doesn't start before the database is available.
+    healthcheck:
+      test:
+        ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+```
+
+### 2.11.5. Build image and run the containers
+
+From the project directory, run:
+
+```bash
+docker compose up --build
+```
+
+Make sure both the `web` and `db` containers are running.
+
+### 2.11.6. Test postgreSQL
+
+Run the `psql` shell from the `db` container:
+
+```bash
+docker compose exec db psql -U <db_user> -l
+```
+
+We should see our database name.
+
+Again run:
+
+```bash
+docker compose exec db psql -U <db_user> <db_name>
+```
+
+It should connect to the database.
+
+> [!TIP]
+> You can also access the `exec` shell from your Docker Desktop by navigating to the `db` container.
+
+### 2.11.7. Run migrations and create a superuser
+
+In another terminal window, run migrations and create a superuser in the web container:
+
+```bash
+docker compose exec web python manage.py makemigrations
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
+```
+
+Open the browser and navigate to http://localhost:8000. You should see our same api application running but this time from the containerized application.
+
+Press `ctrl+c` to stop the application.
+
+### 2.11.8. Persist data through volumes
+
+Currently, PostgreSQL stores its data inside the `db` container. If you delete the container, the database data will be lost.
+
+To avoid this, we'll use a Docker volume to store PostgreSQL's data independently of the container.
+
+Update the `compose.yaml` file as follows:
+
+```yaml
+services:
+  web:
+    # ...
+
+  db:
+    #...
+    restart: always
+    volumes:
+      # Persist database data across container restarts.
+      - db-data:/var/lib/postgresql
+    environment:
+      # ...
+
+volumes:
+  db-data:
+```
+
+The `db-data` volume is now managed by Docker and persists even when the `db` container is deleted and recreated.
+
+You can now verify persistence by creating some database data (you can use the browsable api to create some tasks attached to a user), deleting the `db` container, and recreating it.
+
+First, press `ctrl+c` to stop the application if it's running.
+
+Then, run:
+
+```bash
+
+docker compose down
+docker compose up --build
+```
+
+The database data is now stored in the `db-data` volume rather than inside the container.
+
+> [!NOTE]
+> To remove the volume and its data, you would need to explicitly use `-v` flag with `docker compose down`:
+>
+> ```bash
+> docker compose down -v
+> ```
+
+### 2.11.9. Improve Dockerfile using mounts to `uv sync`
+
+We'll update the `Dockerfile` with a few improvements to how dependencies are installed::
+
+- Add `UV_LINK_MODE=copy` so `uv` copies packages instead of creating links between the cache and the virtual environment.
+- Use a `cache` mount so `uv` can reuse downloaded packages between builds.
+- Instead of permanently copying `pyproject.toml` and `uv.lock` into an image layer, make them temporarily available to `uv sync` using `bind` mounts.
+- Add `# syntax=docker/dockerfile:1` to the top of the Dockerfile. This tells Docker to use the stable version `1` of the Dockerfile syntax, which supports features such as `RUN --mount`.
+
+So, our resulting `Dockerfile` is:
+
 ```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM dhi.io/python:3.14-alpine3.24-dev
+
+# ... existing instructions ...
+
+RUN pip install --quiet --root-user-action=ignore uv
+
+# Use copy mode since the cache and build filesystem are on different volumes.
+ENV UV_LINK_MODE=copy
+
+WORKDIR /app
+
+# Install dependencies into a `.venv` using `cache` and `bind` mounts
+# so neither uv not the lock files need to be copied into the image.
+# `uv sync` creates `.venv` and installs the dependencies in it.
+# `--frozen` tells uv to use the existing `uv.lock` file;
+# `--no-install-project` tells uv not to install the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project
+
+# ... existing instructions ...
+```
+
+Run `docker compose down` and then `docker compose up --build` to rebuild the image.
+
+## 2.12. Create multi-stage Dockerfile
+
+Now, let's introduce a simple two-stage Dockerfile.
+
+Our current Dockerfile does everything in one image
+
+The problem is that the `-dev` image contains tools needed to build the application, but we don't need those tools when we're merely running the application. So, we split our Dockerfile into two stages:
+
+```
+BUILD STAGE
+────────────────────────
+DHI Python -dev
+install uv (create .venv)
+install dependencies
+       └────┐
+            ▼
+RUNTIME STAGE
+────────────────────────
+DHI Python runtime
+copy .venv
+copy application source
+run dev server
+```
+
+This is the fundamental idea of a multi-stage build.
+
+So, here is our two-stage Dockerfile:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+###### BUILD STAGE ######
+
 # Build my image from a base python image from DHI registry
 # `-dev` image includes tools needed to install packages.
-FROM dhi.io/python:3.14-alpine3.24-dev
+FROM dhi.io/python:3.14-alpine3.24-dev AS builder
 
 # Prevent Python from writing `.pyc` files to disk.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -2157,26 +2437,50 @@ ENV PYTHONUNBUFFERED=1
 # `--root-user-action=ignore` (optional) prevents pip from warning about the root user
 RUN pip install --quiet --root-user-action=ignore uv
 
+# Use copy mode since the cache and build filesystem are on different volumes.
+ENV UV_LINK_MODE=copy
+
 # Set `/app` as the working directory inside the container
 WORKDIR /app
 
-# Copy the dependencies files to the working directory
-COPY pyproject.toml uv.lock ./
-
+# Install dependencies into a `.venv` using `cache` and `bind` mounts
+# so neither uv not the lock files need to be copied into the image.
 # `uv sync` creates `.venv` and installs the dependencies in it.
 # `--frozen` tells uv to use the existing `uv.lock` file;
 # `--no-install-project` tells uv not to install the project
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project
+
+
+###### RUNTIME STAGE ######
+
+# # Use minimal DHI image with no shell or package manager
+# already runs as the nonroot user.
+FROM dhi.io/python:3.14-alpine3.24
+
+# Prevent Python from writing `.pyc` files to disk.
+ENV PYTHONDONTWRITEBYTECODE=1
+# Prevent Python from buffering stdout/stderr so logs appear immediately.
+ENV PYTHONUNBUFFERED=1
+# Make executables from the copied virtual environment available on PATH.
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Set `/app` as the working directory inside the container
+WORKDIR /app
+
+# Copy the pre-built virtual environment and application source code.
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy the contents into container at `/app`
 COPY . .
-
-# Tell python to use `.venv`
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port 8000: just a metadata (optional)
 EXPOSE 8000
 
 # Base command to run when the container starts
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 ```
+
+Run `docker compose down` and `docker compose up --build` to rebuild the image and on browser visit `http://localhost:8000/` to check that everything is working fine.
