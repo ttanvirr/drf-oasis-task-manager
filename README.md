@@ -69,7 +69,7 @@
     - [2.11.7. Run migrations and create a superuser](#2117-run-migrations-and-create-a-superuser)
     - [2.11.8. Persist data through volumes](#2118-persist-data-through-volumes)
     - [2.11.9. Improve Dockerfile using mounts to `uv sync`](#2119-improve-dockerfile-using-mounts-to-uv-sync)
-  - [2.12. Create multi-stage Dockerfile](#212-create-multi-stage-dockerfile)
+    - [2.12. Create multi-stage Dockerfile](#212-create-multi-stage-dockerfile)
 
 # 1. Oasis task manager
 
@@ -2390,7 +2390,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 Run `docker compose down` and then `docker compose up --build` to rebuild the image.
 
-## 2.12. Create multi-stage Dockerfile
+### 2.12. Create multi-stage Dockerfile
 
 Now, let's introduce a simple two-stage Dockerfile.
 
