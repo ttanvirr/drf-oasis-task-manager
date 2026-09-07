@@ -69,7 +69,9 @@
     - [2.11.7. Run migrations and create a superuser](#2117-run-migrations-and-create-a-superuser)
     - [2.11.8. Persist data through volumes](#2118-persist-data-through-volumes)
     - [2.11.9. Improve Dockerfile using mounts to `uv sync`](#2119-improve-dockerfile-using-mounts-to-uv-sync)
-    - [2.12. Create multi-stage Dockerfile](#212-create-multi-stage-dockerfile)
+    - [2.11.10. Create multi-stage Dockerfile](#21110-create-multi-stage-dockerfile)
+  - [2.12. Organising tasks with folders](#212-organising-tasks-with-folders)
+    - [2.12.1. Creating the `Folder` model](#2121-creating-the-folder-model)
 
 # 1. Oasis task manager
 
@@ -2390,7 +2392,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 Run `docker compose down` and then `docker compose up --build` to rebuild the image.
 
-### 2.12. Create multi-stage Dockerfile
+### 2.11.10. Create multi-stage Dockerfile
 
 Now, let's introduce a simple two-stage Dockerfile.
 
@@ -2484,5 +2486,90 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 ```
 
 Run `docker compose down` and `docker compose up --build` to rebuild the image and on browser visit `http://localhost:8000/` to check that everything is working fine.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+## 2.12. Organising tasks with folders
+
+So far, every Task just floats around in one big list. We want users to be able to create their own folders (like "Deep Work", "Personal Projects", "Reading List") and organise tasks into them.
+
+We'll build this the same way we built everything else: model → migration → serializer → view → permissions → URLs.
+
+### 2.12.1. Creating the `Folder` model
+
+A folder is owned by exactly one user (just like a `Task`), and has a name. Let's edit `tasks/models.py` to add the `Folder` model:
+
+```py
+from django.db import models
+
+class Folder(models.Model):
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(
+        "auth.User", related_name="folders", on_delete=models.CASCADE
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["-created_at"]
+        # a user shouldn't be able to create two folders with the same name
+        unique_together = ("owner", "name")
+
+class Task(models.Model):
+    # ...
+```
+
+Now let's link `Task` to `Folder`. Edit the `Task` model in the same file:
+
+`tasks/models.py`
+
+```py
+# ...
+
+class Task(models.Model):
+    # existing fields...
+    folder = models.ForeignKey(
+        Folder, related_name="tasks", on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    # existing codes...
+```
+
+Two design decisions here are worth explaining:
+
+- `null=True, blank=True` — a task doesn't have to belong to a folder. This also means existing tasks (created before this feature existed) don't break; they simply end up with `folder = None`, which is effectively an "All Tasks" / uncategorised bucket.
+- `on_delete=models.SET_NULL` — if a user deletes a folder, we don't want to silently destroy every task inside it. Instead, Django detaches those tasks (`folder` becomes `None`) and leaves them intact.
+
+As always, create the migration (don't apply it yet):
+
+```bash
+uv run manage.py makemigrations tasks
+```
+
+This will successfully generate a single migration file for the changes. But you'll probably see a warning like this:
+
+```
+RuntimeWarning: Got an error checking a consistent migration history... failed to resolve host 'db'
+```
+
+Why this warning?
+
+Our `DATABASE_URL` (in `.env`) points at a host called `db` — that's the name of our Postgres service inside `compose.yaml`. Docker's internal network resolves `db` to the right container only when a command runs inside that same Docker network (e.g., via `docker compose exec web ...`).
+
+We ran `uv run manage.py makemigrations` directly on our host machine, outside Docker entirely. Our host has no idea what `db` means — hence failed to resolve host `'db'`.
+
+So, for now, we will be creating migrations on the host using `uv run manage.py makemigrations` as we did, ignoring the warning but apply those migrations on container:
+
+```bash
+# Rebuild the image so `COPY . .` picks up the new migration file
+docker compose up --build
+# Apply migrations against the real Postgres container
+docker compose exec web python manage.py migrate
+```
+
+Commit changes to Git.
 
 [⬆️ Return to Table of contents](#table-of-contents)
