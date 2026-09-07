@@ -2484,3 +2484,5 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 ```
 
 Run `docker compose down` and `docker compose up --build` to rebuild the image and on browser visit `http://localhost:8000/` to check that everything is working fine.
+
+[⬆️ Return to Table of contents](#table-of-contents)
