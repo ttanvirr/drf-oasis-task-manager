@@ -5,6 +5,7 @@ from tasks import views
 
 # Create a router and register our ViewSets with it.
 router = DefaultRouter()
+router.register(r"folders", views.FolderViewSet, basename="folder")
 router.register(r"tasks", views.TaskViewSet, basename="task")
 router.register(r"users", views.UserViewSet, basename="user")
 

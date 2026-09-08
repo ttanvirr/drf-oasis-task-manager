@@ -15,8 +15,35 @@ from drf_spectacular.utils import (
 
 from tasks.permissions import IsOwnerOrAdmin, IsSuperuser
 
-from .models import Task
-from .serializers import TaskSerializer, UserRegistrationSerializer, UserSerializer
+from .models import Folder, Task
+from .serializers import (
+    FolderSerializer,
+    TaskSerializer,
+    UserRegistrationSerializer,
+    UserSerializer,
+)
+
+
+class FolderViewSet(viewsets.ModelViewSet):
+    """
+    This ViewSet automatically provides `list`, `create`, `retrieve`,
+    `update` and `destroy` actions for folders.
+    """
+
+    queryset = Folder.objects.all()
+    serializer_class = FolderSerializer
+    # authenticated users can create new folders,
+    # creator of a folder can update or delete it
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+
+    def perform_create(self, serializer):
+        # associate authenticated user with a new folder
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Folder.objects.all()
+        return Folder.objects.filter(owner=self.request.user)
 
 
 @extend_schema_view(

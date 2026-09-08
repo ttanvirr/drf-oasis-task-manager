@@ -73,6 +73,7 @@
   - [2.12. Organising tasks with folders](#212-organising-tasks-with-folders)
     - [2.12.1. Creating the `Folder` model](#2121-creating-the-folder-model)
     - [2.12.2. Creating `FolderSerializer` and updating others](#2122-creating-folderserializer-and-updating-others)
+    - [Creating `FolderViewSet`, permissions and URL routing](#creating-folderviewset-permissions-and-url-routing)
 
 # 1. Oasis task manager
 
@@ -2652,4 +2653,64 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
 Commit changes to Git.
 
-⬆️ Return to Table of contents
+[⬆️ Return to Table of contents](#table-of-contents)
+
+### Creating `FolderViewSet`, permissions and URL routing
+
+Same shape as `TaskViewSet`: a `ModelViewSet` scoped to the current user, with the owner set automatically on create.
+
+In `tasks/views.py`:
+
+```py
+from .models import Folder, Task
+from .serializers import (
+    FolderSerializer,
+    # ...
+)
+
+# ...
+
+class FolderViewSet(viewsets.ModelViewSet):
+    """
+    This ViewSet automatically provides `list`, `create`, `retrieve`,
+    `update` and `destroy` actions for folders.
+    """
+
+    queryset = Folder.objects.all()
+    serializer_class = FolderSerializer
+    # authenticated users can create new folders,
+    # creator of a folder can update or delete it
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+
+    def perform_create(self, serializer):
+        # associate authenticated user with a new folder
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Folder.objects.all()
+        return Folder.objects.filter(owner=self.request.user)
+```
+
+Register the route in `tasks/urls.py`:
+
+```py
+# ...
+router.register(r"folders", views.FolderViewSet, basename="folder")
+# ...
+```
+
+Run the development server using `docker compose up --build` and check that everything works as expected.
+
+> [!NOTE]
+> Don't skip testing the actual permission boundaries here. Before moving on, manually verify (e.g. with curl, Postman, or the browsable API using two different accounts):
+>
+> - An anonymous request to `/folders/` is rejected.
+> - User B cannot see User A's folders in `GET /folders/`.
+> - User B gets a `404` (not a `403`) retrieving User A's folder by ID directly — `get_queryset()` filtering means it looks like it doesn't exist at all, which is more secure than confirming it exists but is forbidden.
+> - User A cannot create a task whose `folder` points at User B's folder.
+> - Deleting a folder detaches its tasks (`folder` becomes `null`) instead of deleting them, confirming `on_delete=SET_NULL` behaves as intended through the API, not just in the database.
+
+Commit changes to Git.
+
+[⬆️ Return to Table of contents](#table-of-contents)
