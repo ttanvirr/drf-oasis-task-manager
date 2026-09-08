@@ -46,7 +46,7 @@ class TaskSerializer(serializers.HyperlinkedModelSerializer):
         # currently authenticated user, so nobody can file a task into
         # someone else's folder.
         request = self.context.get("request")
-        if request is not None:
+        if request is not None and request.user.is_authenticated:
             self.fields["folder"].queryset = Folder.objects.filter(owner=request.user)
 
 
