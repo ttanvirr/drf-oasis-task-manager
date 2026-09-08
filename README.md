@@ -72,6 +72,7 @@
     - [2.11.10. Create multi-stage Dockerfile](#21110-create-multi-stage-dockerfile)
   - [2.12. Organising tasks with folders](#212-organising-tasks-with-folders)
     - [2.12.1. Creating the `Folder` model](#2121-creating-the-folder-model)
+    - [2.12.2. Creating `FolderSerializer` and updating others](#2122-creating-folderserializer-and-updating-others)
 
 # 1. Oasis task manager
 
@@ -2573,3 +2574,82 @@ docker compose exec web python manage.py migrate
 Commit changes to Git.
 
 [⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.12.2. Creating `FolderSerializer` and updating others
+
+We'll use `HyperlinkedModelSerializer` for `FolderSerializer`. This will be similar to `UserSerializer`.
+
+Edit `tasks/serializers.py`:
+
+```py
+from .models import Task, Folder
+
+class FolderSerializer(serializers.HyperlinkedModelSerializer):
+    # make the `owner` field read-only
+    owner = serializers.ReadOnlyField(source="owner.username")
+    tasks = serializers.HyperlinkedRelatedField(
+        many=True, view_name="task-detail", read_only=True
+    )
+
+    class Meta:
+        model = Folder
+        fields = ["url", "id", "name", "owner", "tasks", "created_at", "updated_at"]
+```
+
+Update the `TaskSerializer`:
+
+```py
+class TaskSerializer(serializers.HyperlinkedModelSerializer):
+    # ...
+    # include folder to override its default behavior
+    folder = serializers.HyperlinkedRelatedField(
+        view_name="folder-detail",
+        queryset=Folder.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = Task
+        fields = [
+            # ...
+            "folder",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Restrict the `folder` dropdown/choices to folders owned by the
+        # currently authenticated user, so nobody can file a task into
+        # someone else's folder.
+        request = self.context.get("request")
+        if request is not None:
+            self.fields["folder"].queryset = Folder.objects.filter(owner=request.user)
+```
+
+> [!IMPORTANT]
+> `view_name="folder-detail"` won't resolve to anything yet — we haven't registered a `FolderViewSet` with the router. That's the next step.
+
+We override `__init__` to narrow the queryset to folders owned by the currently authenticated user per-request, using `self.context["request"]` — which DRF automatically provides when a ViewSet builds the serializer.
+
+`required=False, allow_null=True` mirror the model field (`null=True, blank=True`), so a task can be created or kept without a folder — landing in the "uncategorised" bucket.
+
+Finally, update `UserSerializer` so a user's own folders are discoverable from their profile too, the same way `tasks` already is:
+
+```py
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    # ...
+    folders = serializers.HyperlinkedRelatedField(
+        many=True, view_name="folder-detail", read_only=True
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            # ...
+            "folders",
+        ]
+```
+
+Commit changes to Git.
+
+⬆️ Return to Table of contents
