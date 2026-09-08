@@ -2,8 +2,7 @@ from venv import create
 
 from django.contrib.auth.models import User
 from rest_framework import generics, permissions, viewsets
-from rest_framework.reverse import reverse
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from drf_spectacular.utils import (
@@ -13,6 +12,7 @@ from drf_spectacular.utils import (
     OpenApiResponse,
 )
 
+from tasks.filters import TaskFilter
 from tasks.permissions import IsOwnerOrAdmin, IsSuperuser
 
 from .models import Folder, Task
@@ -182,6 +182,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     # authenticated users can create new tasks,
     # creator of a task can update or delete it
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+    filterset_class = TaskFilter
 
     def perform_create(self, serializer):
         # associate authenticated user with a new task
