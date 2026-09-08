@@ -73,7 +73,11 @@
   - [2.12. Organising tasks with folders](#212-organising-tasks-with-folders)
     - [2.12.1. Creating the `Folder` model](#2121-creating-the-folder-model)
     - [2.12.2. Creating `FolderSerializer` and updating others](#2122-creating-folderserializer-and-updating-others)
-    - [Creating `FolderViewSet`, permissions and URL routing](#creating-folderviewset-permissions-and-url-routing)
+    - [2.12.3. Creating `FolderViewSet`, permissions and URL routing](#2123-creating-folderviewset-permissions-and-url-routing)
+    - [2.12.4. Filtering tasks by folder](#2124-filtering-tasks-by-folder)
+      - [Install and register `django-filter`](#install-and-register-django-filter)
+      - [Creating a TaskFilter](#creating-a-taskfilter)
+      - [Wiring it into `TaskViewSet`](#wiring-it-into-taskviewset)
 
 # 1. Oasis task manager
 
@@ -2655,7 +2659,7 @@ Commit changes to Git.
 
 [⬆️ Return to Table of contents](#table-of-contents)
 
-### Creating `FolderViewSet`, permissions and URL routing
+### 2.12.3. Creating `FolderViewSet`, permissions and URL routing
 
 Same shape as `TaskViewSet`: a `ModelViewSet` scoped to the current user, with the owner set automatically on create.
 
@@ -2714,3 +2718,102 @@ Run the development server using `docker compose up --build` and check that ever
 Commit changes to Git.
 
 [⬆️ Return to Table of contents](#table-of-contents)
+
+### 2.12.4. Filtering tasks by folder
+
+In the frontend, clicking a folder in the sidebar (e.g. "Deep Work") should display only the tasks belonging to that folder. To support this, we need an endpoint such as `/tasks/?folder=<id>` that filters tasks on the backend.
+
+This approach is preferable to relying on `/folders/<id>/` for three reasons::
+
+- The folder detail endpoint returns task URLs, not task data. Fetching the tasks through `/folders/<id>/` would therefore require additional client-side `GET` requests. Filtering through `/tasks/?folder=<id>` lets the frontend retrieve the complete task data in a single request.
+
+- Tasks without a folder need to be supported. The "All Tasks" view includes tasks that don't belong to any folder. Since there is no folder resource representing these tasks, there is no `/folders/<id>/` endpoint to query. A filter such as `?folder=none` provides a way to explicitly request these uncategorised tasks.
+
+- The nested task list returned by `/folders/<id>/` is a flat, unpaginated array. By contrast, `/tasks/?folder=<id>` uses the same `PageNumberPagination` as other task-list requests, making it more suitable for a real frontend UI.
+
+#### Install and register `django-filter`
+
+Using `django-filter` is the recommended way to filter query results in DRF. So, let's install it using `uv`:
+
+```bash
+uv add django-filter
+```
+
+Add it to `INSTALLED_APPS` in `config/settings.py`:
+
+```py
+INSTALLED_APPS = [
+    # ... existing django apps ...
+    # 3rd-party
+    "rest_framework",
+    "django_filters",  # new
+    "drf_spectacular",
+    # Local apps
+    "tasks",
+]
+```
+
+Then tell DRF to use it as the default filtering backend, in the same `REST_FRAMEWORK` settings dict we already use for pagination and docs:
+
+```py
+REST_FRAMEWORK = {
+    # ... existing settings ...
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+}
+```
+
+#### Creating a TaskFilter
+
+`django-filter` works by describing what's filterable in a `FilterSet` class — the same idea as a serializer, but for query parameters instead of request bodies. Create `tasks/filters.py`:
+
+```py
+from django_filters import rest_framework as filters
+from rest_framework.exceptions import ValidationError
+
+from .models import Task
+
+
+class TaskFilter(filters.FilterSet):
+    # a plain NumberFilter would reject "none", so we handle it ourselves
+    folder = filters.CharFilter(method="filter_folder")
+
+    class Meta:
+        model = Task
+        # `completed` and `important` are booleans, so django-filter can
+        # generate working filters for them automatically, no extra code.
+        fields = ["completed", "important"]
+
+    def filter_folder(self, queryset, name, value):
+        # Treat "none" and "null" as requests for tasks without folder.
+        if value.lower() in ("none", "null"):
+            return queryset.filter(folder__isnull=True)
+        # Otherwise, treat a numeric value as a folder's primary key.
+        if value.isdigit():
+            return queryset.filter(folder_id=value)
+        # Reject any value that is neither a folder ID nor a null-folder value.
+        raise ValidationError({"folder": "Must be an integer id, or 'none'."})
+
+```
+
+A few things worth pointing out:
+
+- **`completed` and `important` needed zero custom code.** Listing them in `Meta.fields` is enough — `django-filter` looks at the model field types (`BooleanField`) and generates working, validated filters for `?completed=true` and `?important=false` automatically.
+- **`folder` needed a custom `method`** because we want `?folder=none` to mean "tasks without a folder" — behaviour a plain numeric filter doesn't have out of the box. `method="filter_folder"` tells `django-filter` to hand off to our own function instead of generating one.
+- **Raising `rest_framework.exceptions.ValidationError`** for a non-numeric, non-"none" value still gets converted into a clean `400` response by DRF.
+
+#### Wiring it into `TaskViewSet`
+
+In `TaskViewSet`, add the `TaskFilter` class to `filterset_class`:
+
+`tasks/views.py`:
+
+```py
+from tasks.filters import TaskFilter
+
+class TaskViewSet(viewsets.ModelViewSet):
+    # ...
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
+    filterset_class = TaskFilter # new
+```
+
+We didn't need to set `filter_backends` on the ViewSet itself — that comes from `DEFAULT_FILTER_BACKENDS` in settings, applied project-wide. `filterset_class` is the only per-view piece needed.
