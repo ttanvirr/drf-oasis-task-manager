@@ -88,6 +88,7 @@
     - [2.13.6. Configure local Nginx](#2136-configure-local-nginx)
     - [2.13.7. Build and test the stack](#2137-build-and-test-the-stack)
     - [2.13.8. Restart and shutdown checks](#2138-restart-and-shutdown-checks)
+  - [2.14. Initialize the React frontend](#214-initialize-the-react-frontend)
 
 # 1. Oasis task manager
 
@@ -3313,6 +3314,12 @@ docker compose -f compose.local-prod.yaml down
 
 Gunicorn receives Docker's stop signal and has 30 seconds of graceful shutdown time; Compose allows 35 seconds before forcefully stopping the container. The named `db-data` volume survives `down`, so your local PostgreSQL data remains available next time.
 
-## The end <!-- omit in toc -->
+## The end of backend <!-- omit in toc -->
 
 Use this setup as the deployment baseline before later adding a real domain and HTTPS. Those Internet-facing concerns should be a separate follow-up, rather than mixed into this local verification guide.
+
+## 2.14. Initialize the React frontend
+
+In the project root, create a folder named `frontend` and navigate into it
+
+Then follow [this link](https://github.com/ttanvirr/react-ts-starter-template) to setup Vite-React-TypeScript, TailwindCSS and Shadcn with a theme toggler.
