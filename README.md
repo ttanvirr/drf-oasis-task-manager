@@ -79,6 +79,15 @@
       - [2.12.4.2. Creating a TaskFilter](#21242-creating-a-taskfilter)
       - [2.12.4.3. Wiring it into `TaskViewSet`](#21243-wiring-it-into-taskviewset)
       - [2.12.4.4. Edit documentation for FolderViewSet](#21244-edit-documentation-for-folderviewset)
+  - [2.13. Production-ready setup with Docker, Gunicorn, and Nginx](#213-production-ready-setup-with-docker-gunicorn-and-nginx)
+    - [2.13.1. What this local setup verifies](#2131-what-this-local-setup-verifies)
+    - [2.13.2. Prerequisites](#2132-prerequisites)
+    - [2.13.3. Prepare Django for static files and a local host](#2133-prepare-django-for-static-files-and-a-local-host)
+    - [2.13.4. Run Django with Gunicorn](#2134-run-django-with-gunicorn)
+    - [2.13.5. Add a local production-style Compose file](#2135-add-a-local-production-style-compose-file)
+    - [2.13.6. Configure local Nginx](#2136-configure-local-nginx)
+    - [2.13.7. Build and test the stack](#2137-build-and-test-the-stack)
+    - [2.13.8. Restart and shutdown checks](#2138-restart-and-shutdown-checks)
 
 # 1. Oasis task manager
 
@@ -2949,3 +2958,361 @@ docker compose up --build
 ```
 
 Check every enpoint and make sure that all of them are working as expected.
+
+[⬆️ Return to Table of contents](#table-of-contents)
+
+## 2.13. Production-ready setup with Docker, Gunicorn, and Nginx
+
+This chapter replaces Django's development server with Gunicorn and places Nginx in front of it, while keeping the entire stack local and testable on Ubuntu or WSL.
+
+```
+Browser → http://localhost:8080 → Nginx → Gunicorn → Django → PostgreSQL
+```
+
+Nginx is the only service published to the host. Gunicorn and PostgreSQL communicate only across Docker Compose's internal network. That mirrors the application topology used in production, without requiring a domain, DNS, HTTPS certificates, a cloud server, or firewall changes.
+
+> [!NOTE]
+> This is deliberately a **production-style local test**, not an Internet-facing deployment. The URL remains \`http://localhost:8080\`; TLS, domain configuration, HSTS, and public-host hardening are out of scope here.
+
+### 2.13.1. What this local setup verifies
+
+After completing this section, you can verify all of the following on your Ubuntu/WSL machine:
+
+- Django starts through Gunicorn instead of `manage.py runserver`.
+- Nginx proxies application/API requests to Gunicorn.
+- Nginx serves collected static files directly.
+- PostgreSQL, Gunicorn, and Nginx resolve one another by Compose service name.
+- Port `8000` is not published on the host; only Nginx is reachable at port `8080`.
+- Container health checks, restart policies, stdout logs, and graceful Gunicorn shutdown work as expected.
+
+### 2.13.2. Prerequisites
+
+Keep the project directory on the Linux filesystem for a smoother Docker/WSL experience.
+
+Update `.env` with these Django/Gunicorn settings:
+
+```.env
+DEBUG=False
+SECRET_KEY=local-only-long-random-value
+DATABASE_URL=postgresql://<db_user>:<user_password>@db:5432/<db_name>
+
+ALLOWED_HOSTS=localhost,127.0.0.1
+GUNICORN_WORKERS=2
+GUNICORN_TIMEOUT=60
+
+POSTGRES_DB=<db_name>
+POSTGRES_USER=<db_user>
+POSTGRES_PASSWORD=<user_password>
+```
+
+`DEBUG=False` is useful here because it exposes configuration mistakes that Django's development mode can hide.
+
+### 2.13.3. Prepare Django for static files and a local host
+
+Update `config/settings.py`:
+
+```py
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+```
+
+`STATIC_ROOT` is where `collectstatic` gathers Django admin assets and any project assets. That directory will be shared read-only with Nginx.
+
+Add an inexpensive health endpoint in `config/urls.py`:
+
+```py
+from django.http import HttpResponse
+
+def health_check(request):
+    return HttpResponse("ok", content_type="text/plain")
+
+urlpatterns = [
+    path("health/", health_check, name="health"),
+    # existing paths…
+]
+```
+
+It gives Docker and Nginx a dependable way to confirm that Gunicorn can serve Django. It does not need authentication and should remain simple.
+
+### 2.13.4. Run Django with Gunicorn
+
+Install Gunicorn:
+
+```bash
+uv add gunicorn
+```
+
+Create `gunicorn.conf.py` in the repository root:
+
+```py
+import os
+
+bind = "0.0.0.0:8000"
+workers = int(os.getenv("GUNICORN_WORKERS", "2"))
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
+graceful_timeout = 30
+keepalive = 5
+
+accesslog = "-"
+errorlog = "-"
+loglevel = "info"
+max_requests = 1000
+max_requests_jitter = 100
+```
+
+> [!NOTE]
+>
+> - `os.getenv` is deliberate here. `django-environ` is ideal for Django settings, but Gunicorn starts before Django has any need to load its settings; using the standard library keeps `gunicorn.conf.py` independent and simple.
+> - `bind = "0.0.0.0:8000"` is required because Nginx runs in a separate container. It makes Gunicorn reachable from Nginx.
+
+Then replace the final command in `Dockerfile`:
+
+```dockerfile
+CMD ["gunicorn", "config.wsgi:application", "--config", "gunicorn.conf.py"]
+```
+
+The existing multi-stage image and its non-root runtime stage can remain unchanged.
+
+### 2.13.5. Add a local production-style Compose file
+
+Keep the current `compose.yaml` for ordinary development. Create `compose.local-prod.yaml` for the local Nginx/Gunicorn test:
+
+```yaml
+services:
+  web:
+    # Build the image using Dockerfile in the current directory
+    build: .
+    # (optional) name the image
+    image: oasis-task-manager
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    volumes:
+      - staticfiles:/app/staticfiles
+    # Wait for the database to pass its healthcheck and
+    # start the `db` service before starting the `web` service.
+    depends_on:
+      db:
+        condition: service_healthy
+    # Automatically restart the db container unless explicitly stopped.
+    restart: unless-stopped
+    stop_grace_period: 35s
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  nginx:
+    image: dhi.io/nginx:1.31-alpine3.24
+    ports:
+      # Docker Hardened Images run as non-root,
+      # so Nginx should listen on an unprivileged port such as 8080, not 80.
+      - "8080:8080"
+    volumes:
+      # Create `nginx/default.conf` in the project root
+      # and mount it as a read-only file on the Nginx container.
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mount the static files directory as a read-only volume.
+      - staticfiles:/static:ro
+    depends_on:
+      # Wait for Gunicorn to pass its healthcheck and
+      # start the `web` service before starting the `nginx` service.
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    # Run PostgreSQL container using an image
+    image: dhi.io/postgres:18
+    env_file:
+      - .env
+    # Left-side names are not arbitrary; Right-side name are defined in `.env`
+    # These are PostgreSQL image environment variables.
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      # Persist database data across container restarts.
+      - db-data:/var/lib/postgresql
+    # Expose the port only to other services on the Compose network,
+    # not to the host machine.
+    expose:
+      - 5432
+    # Automatically restart the db container unless explicitly stopped.
+    restart: unless-stopped
+    # Only report healthy once PostgreSQL is ready to accept connections,
+    # so the web service doesn't start before the database is available.
+    healthcheck:
+      test:
+        ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
+  staticfiles:
+```
+
+The important difference from the existing Compose file is that `web` uses `expose`, not `ports`. Nginx alone maps a host port 8080 to `http://localhost:8080`.
+
+### 2.13.6. Configure local Nginx
+
+Create `nginx/default.conf`:
+
+```nginx
+# Give Nginx a named backend group
+upstream django {
+    server web:8000;
+    keepalive 32;
+}
+
+server {
+    listen 8080;
+    server_name localhost;
+    # limit an incoming request body to 10 MB (optional)
+    client_max_body_size 10m;
+
+    location /static/ {
+        alias /static/;
+        access_log off;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
+    location = /health/ {
+        proxy_pass http://django;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://django;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+}
+```
+
+> [!NOTE]
+> We use `$http_host` instead of `$host` intentionally so that Nginx preserves the port from the original Host header (e.g. `localhost:8080`). This allows Django/DRF to generate absolute URLs with the correct externally accessible host and port.
+
+### 2.13.7. Build and test the stack
+
+Run these commands from the project root:
+
+```bash
+# Validate the expanded Compose configuration.
+docker compose -f compose.local-prod.yaml config
+
+# Start PostgreSQL first, then run one-off release tasks.
+docker compose -f compose.local-prod.yaml up -d --build db
+docker compose -f compose.local-prod.yaml run --rm web python manage.py migrate --noinput
+docker compose -f compose.local-prod.yaml run --rm web python manage.py collectstatic --noinput
+```
+
+You may face an error like this:
+
+```bash
+PermissionError: Permission denied: '/app/staticfiles/admin'
+```
+
+`collectstatic` ran as the non-root user in your DHI Python runtime image, but the new `staticfiles` named volume is owned by root. Django could read it but could not create: `/app/staticfiles/admin`. So this is a volume-permissions issue.
+
+First confirm the runtime UID:
+
+```bash
+docker compose -f compose.local-prod.yaml run --rm --no-deps \
+    web python -c "import os; print(os.geteuid(), os.getegid())"
+```
+
+It will likely print `65532 65532`, the common DHI non-root UID/GID.
+
+Now update the `compose.local-prod.yaml` to add a service named `staticfiles-init`:
+
+```yaml
+services:
+  staticfiles-init:
+    image: dhi.io/python:3.14-alpine3.24-dev
+    user: "0:0"
+    volumes:
+      - staticfiles:/app/staticfiles
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        mkdir -p /app/staticfiles
+        chown -R 65532:65532 /app/staticfiles
+    restart: "no"
+
+  web:
+    # ...
+    depends_on:
+      db:
+        condition: service_healthy
+      staticfiles-init:
+        condition: service_completed_successfully
+```
+
+Now run the above commands again and check that they succeed.
+
+Then Start Gunicorn and Nginx.
+
+```bash
+docker compose -f compose.local-prod.yaml up -d --build
+```
+
+Now test the routes:
+
+```bash
+curl -i http://localhost:8080/health/
+curl -I http://localhost:8080/static/admin/css/base.css
+docker compose -f compose.local-prod.yaml logs -f web nginx
+```
+
+Expected results:
+
+- `/health/` returns `200 OK` with `ok`.
+- The admin CSS request returns `200 OK` and is logged by Nginx, not Gunicorn.
+- Gunicorn access/error logs appear through `web`; Nginx logs appear through `nginx`.
+- `docker compose ... ps` shows the health state for `web` and `db`.
+
+To confirm that Gunicorn is not exposed directly, `docker compose -f compose.local-prod.yaml ps` should show only the Nginx `8080->8080` port mapping. There should be no `8000->8000` or `5432->5432` mapping.
+
+### 2.13.8. Restart and shutdown checks
+
+Try a controlled restart:
+
+```bash
+docker compose -f compose.local-prod.yaml restart web
+curl -fsS http://localhost:8080/health/
+docker compose -f compose.local-prod.yaml down
+```
+
+Gunicorn receives Docker's stop signal and has 30 seconds of graceful shutdown time; Compose allows 35 seconds before forcefully stopping the container. The named `db-data` volume survives `down`, so your local PostgreSQL data remains available next time.
+
+## The end <!-- omit in toc -->
+
+Use this setup as the deployment baseline before later adding a real domain and HTTPS. Those Internet-facing concerns should be a separate follow-up, rather than mixed into this local verification guide.
