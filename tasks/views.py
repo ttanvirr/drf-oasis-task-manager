@@ -24,6 +24,111 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary="List all folders",
+        description="Return a paginated list of the authenticated user's folders.",
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="A paginated list of folders.",
+            ),
+        },
+    ),
+    create=extend_schema(
+        summary="Create a folder",
+        description="Create a new folder. Authentication is required. "
+        "The authenticated user will be set as the owner of the folder.",
+        request=FolderSerializer,
+        responses={
+            201: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully created.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+        },
+    ),
+    retrieve=extend_schema(
+        summary="Retrieve a folder",
+        description="Return the details of a single folder.",
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The requested folder.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    update=extend_schema(
+        summary="Update a folder",
+        description=(
+            "Replace all writable fields of an existing folder. "
+            "Only the folder owner can update the folder."
+        ),
+        request=FolderSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    partial_update=extend_schema(
+        summary="Partially update a folder",
+        description=(
+            "Update one or more fields of an existing folder. "
+            "Only the folder owner can update the folder."
+        ),
+        request=FolderSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    destroy=extend_schema(
+        summary="Delete a folder",
+        description="Delete a folder. Only the folder owner can delete it. "
+        "Tasks in the folder are not deleted — they become uncategorised.",
+        responses={
+            204: OpenApiResponse(
+                description="The folder was successfully deleted.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+)
 class FolderViewSet(viewsets.ModelViewSet):
     """
     This ViewSet automatically provides `list`, `create`, `retrieve`,

@@ -2817,3 +2817,13 @@ class TaskViewSet(viewsets.ModelViewSet):
 ```
 
 We didn't need to set `filter_backends` on the ViewSet itself — that comes from `DEFAULT_FILTER_BACKENDS` in settings, applied project-wide. `filterset_class` is the only per-view piece needed.
+
+#### Edit documentation for FolderViewSet
+
+Add a `@extend_schema_view()` decorator before `FolderViewSet`:
+
+`tasks/views.py`
+
+```py
+
+```
