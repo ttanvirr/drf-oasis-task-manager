@@ -75,9 +75,10 @@
     - [2.12.2. Creating `FolderSerializer` and updating others](#2122-creating-folderserializer-and-updating-others)
     - [2.12.3. Creating `FolderViewSet`, permissions and URL routing](#2123-creating-folderviewset-permissions-and-url-routing)
     - [2.12.4. Filtering tasks by folder](#2124-filtering-tasks-by-folder)
-      - [Install and register `django-filter`](#install-and-register-django-filter)
-      - [Creating a TaskFilter](#creating-a-taskfilter)
-      - [Wiring it into `TaskViewSet`](#wiring-it-into-taskviewset)
+      - [2.12.4.1. Install and register `django-filter`](#21241-install-and-register-django-filter)
+      - [2.12.4.2. Creating a TaskFilter](#21242-creating-a-taskfilter)
+      - [2.12.4.3. Wiring it into `TaskViewSet`](#21243-wiring-it-into-taskviewset)
+      - [2.12.4.4. Edit documentation for FolderViewSet](#21244-edit-documentation-for-folderviewset)
 
 # 1. Oasis task manager
 
@@ -2731,7 +2732,7 @@ This approach is preferable to relying on `/folders/<id>/` for three reasons::
 
 - The nested task list returned by `/folders/<id>/` is a flat, unpaginated array. By contrast, `/tasks/?folder=<id>` uses the same `PageNumberPagination` as other task-list requests, making it more suitable for a real frontend UI.
 
-#### Install and register `django-filter`
+#### 2.12.4.1. Install and register `django-filter`
 
 Using `django-filter` is the recommended way to filter query results in DRF. So, let's install it using `uv`:
 
@@ -2762,7 +2763,7 @@ REST_FRAMEWORK = {
 }
 ```
 
-#### Creating a TaskFilter
+#### 2.12.4.2. Creating a TaskFilter
 
 `django-filter` works by describing what's filterable in a `FilterSet` class — the same idea as a serializer, but for query parameters instead of request bodies. Create `tasks/filters.py`:
 
@@ -2801,7 +2802,7 @@ A few things worth pointing out:
 - **`folder` needed a custom `method`** because we want `?folder=none` to mean "tasks without a folder" — behaviour a plain numeric filter doesn't have out of the box. `method="filter_folder"` tells `django-filter` to hand off to our own function instead of generating one.
 - **Raising `rest_framework.exceptions.ValidationError`** for a non-numeric, non-"none" value still gets converted into a clean `400` response by DRF.
 
-#### Wiring it into `TaskViewSet`
+#### 2.12.4.3. Wiring it into `TaskViewSet`
 
 In `TaskViewSet`, add the `TaskFilter` class to `filterset_class`:
 
@@ -2818,12 +2819,133 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 We didn't need to set `filter_backends` on the ViewSet itself — that comes from `DEFAULT_FILTER_BACKENDS` in settings, applied project-wide. `filterset_class` is the only per-view piece needed.
 
-#### Edit documentation for FolderViewSet
+#### 2.12.4.4. Edit documentation for FolderViewSet
 
 Add a `@extend_schema_view()` decorator before `FolderViewSet`:
 
 `tasks/views.py`
 
 ```py
-
+@extend_schema_view(
+    list=extend_schema(
+        summary="List all folders",
+        description="Return a paginated list of the authenticated user's folders.",
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="A paginated list of folders.",
+            ),
+        },
+    ),
+    create=extend_schema(
+        summary="Create a folder",
+        description="Create a new folder. Authentication is required. "
+        "The authenticated user will be set as the owner of the folder.",
+        request=FolderSerializer,
+        responses={
+            201: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully created.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+        },
+    ),
+    retrieve=extend_schema(
+        summary="Retrieve a folder",
+        description="Return the details of a single folder.",
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The requested folder.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    update=extend_schema(
+        summary="Update a folder",
+        description=(
+            "Replace all writable fields of an existing folder. "
+            "Only the folder owner can update the folder."
+        ),
+        request=FolderSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    partial_update=extend_schema(
+        summary="Partially update a folder",
+        description=(
+            "Update one or more fields of an existing folder. "
+            "Only the folder owner can update the folder."
+        ),
+        request=FolderSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=FolderSerializer,
+                description="The folder was successfully updated.",
+            ),
+            400: OpenApiResponse(
+                description="The request data was invalid, or a folder "
+                "with this name already exists for this user.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+    destroy=extend_schema(
+        summary="Delete a folder",
+        description="Delete a folder. Only the folder owner can delete it. "
+        "Tasks in the folder are not deleted — they become uncategorised.",
+        responses={
+            204: OpenApiResponse(
+                description="The folder was successfully deleted.",
+            ),
+            403: OpenApiResponse(
+                description="The authenticated user is not the folder owner.",
+            ),
+            404: OpenApiResponse(
+                description="The requested folder does not exist.",
+            ),
+        },
+    ),
+)
+class FolderViewSet(viewsets.ModelViewSet):
+   # ...
 ```
+
+Update the `schema.yaml` file with the following command (this command is also helpful for debugging):
+
+```bash
+uv run manage.py spectacular --file schema.yaml
+```
+
+Rebuild the image:
+
+```bash
+docker compose down
+docker compose up --build
+```
+
+Check every enpoint and make sure that all of them are working as expected.

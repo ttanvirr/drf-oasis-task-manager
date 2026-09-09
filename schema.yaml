@@ -154,9 +154,8 @@ paths:
   /folders/:
     get:
       operationId: folders_list
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Return a paginated list of the authenticated user's folders.
+      summary: List all folders
       parameters:
       - name: page
         required: false
@@ -175,12 +174,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedFolderList'
-          description: ''
+          description: A paginated list of folders.
     post:
       operationId: folders_create
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Create a new folder. Authentication is required. The authenticated
+        user will be set as the owner of the folder.
+      summary: Create a folder
       tags:
       - folders
       requestBody:
@@ -204,13 +203,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Folder'
-          description: ''
+          description: The folder was successfully created.
+        '400':
+          description: The request data was invalid, or a folder with this name already
+            exists for this user.
   /folders/{id}/:
     get:
       operationId: folders_retrieve
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Return the details of a single folder.
+      summary: Retrieve a folder
       parameters:
       - in: path
         name: id
@@ -229,12 +230,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Folder'
-          description: ''
+          description: The requested folder.
+        '404':
+          description: The requested folder does not exist.
     put:
       operationId: folders_update
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Replace all writable fields of an existing folder. Only the folder
+        owner can update the folder.
+      summary: Update a folder
       parameters:
       - in: path
         name: id
@@ -265,12 +268,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Folder'
-          description: ''
+          description: The folder was successfully updated.
+        '400':
+          description: The request data was invalid, or a folder with this name already
+            exists for this user.
+        '403':
+          description: The authenticated user is not the folder owner.
+        '404':
+          description: The requested folder does not exist.
     patch:
       operationId: folders_partial_update
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Update one or more fields of an existing folder. Only the folder
+        owner can update the folder.
+      summary: Partially update a folder
       parameters:
       - in: path
         name: id
@@ -300,12 +310,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Folder'
-          description: ''
+          description: The folder was successfully updated.
+        '400':
+          description: The request data was invalid, or a folder with this name already
+            exists for this user.
+        '403':
+          description: The authenticated user is not the folder owner.
+        '404':
+          description: The requested folder does not exist.
     delete:
       operationId: folders_destroy
-      description: |-
-        This ViewSet automatically provides `list`, `create`, `retrieve`,
-        `update` and `destroy` actions for folders.
+      description: Delete a folder. Only the folder owner can delete it. Tasks in
+        the folder are not deleted — they become uncategorised.
+      summary: Delete a folder
       parameters:
       - in: path
         name: id
@@ -320,7 +337,11 @@ paths:
       - basicAuth: []
       responses:
         '204':
-          description: No response body
+          description: The folder was successfully deleted.
+        '403':
+          description: The authenticated user is not the folder owner.
+        '404':
+          description: The requested folder does not exist.
   /tasks/:
     get:
       operationId: tasks_list
