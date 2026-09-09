@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.http import HttpResponse
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import (
@@ -23,7 +24,13 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+
+def health_check(request):
+    return HttpResponse("OK", content_type="text/plain")
+
+
 urlpatterns = [
+    path("health/", health_check, name="health"),
     path("admin/", admin.site.urls),
     path("", include("tasks.urls")),
     # API schema generation
