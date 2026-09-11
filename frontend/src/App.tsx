@@ -1,3 +1,4 @@
+import { ModeToggle } from "@/components/mode-toggle"
 import { Button } from "@/components/ui/button"
 
 const App = () => {
@@ -6,6 +7,7 @@ const App = () => {
       <Button>Click me</Button>
       <Button variant="outline">Click me</Button>
       <Button variant="destructive">Click me</Button>
+      <ModeToggle />
     </div>
   )
 }

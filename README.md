@@ -88,6 +88,8 @@
     - [2.13.6. Configure local Nginx](#2136-configure-local-nginx)
     - [2.13.7. Build and test the stack](#2137-build-and-test-the-stack)
     - [2.13.8. Restart and shutdown checks](#2138-restart-and-shutdown-checks)
+  - [Preparing the backend for frontend](#preparing-the-backend-for-frontend)
+    - [Install and configure CORS](#install-and-configure-cors)
   - [2.14. Initialize the React frontend](#214-initialize-the-react-frontend)
 
 # 1. Oasis task manager
@@ -3318,8 +3320,23 @@ Gunicorn receives Docker's stop signal and has 30 seconds of graceful shutdown t
 
 Use this setup as the deployment baseline before later adding a real domain and HTTPS. Those Internet-facing concerns should be a separate follow-up, rather than mixed into this local verification guide.
 
-## 2.14. Initialize the React frontend
+## 2.14. Preparing the backend for frontend
+
+So far every request to the API came from `curl`/`HTTPie` or the browsable API's own login form, which uses cookies and doesn't need `CORS`. A Vite dev server running on `http://localhost:5173` talking to Django on `http://localhost:8000` is a cross-origin request, and Basic Auth (prompting a native browser popup for a username/password) isn't something we want in a real UI. We need two small additions:
+
+1. `CORS`,
+2. A token the frontend can attach to requests without a popup.
+
+### 2.14.1. Install and configure CORS
+
+In the project root (not the frontend), run:
+
+```bash
+uv add django-cors-headers
+```
+
+## 2.15. Initialize the React frontend
 
 In the project root, create a folder named `frontend` and navigate into it
 
-Then follow [this link](https://github.com/ttanvirr/react-ts-starter-template) to setup Vite-React-TypeScript, TailwindCSS and Shadcn with a theme toggler.
+Then follow [this link](https://github.com/ttanvirr/react-ts-starter-template) to setup Vite-React-TypeScript, TailwindCSS and Shadcn with a theme toggler. We won't use React Router for this single page app.
